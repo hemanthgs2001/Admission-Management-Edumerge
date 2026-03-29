@@ -80,6 +80,12 @@ const createProgram = async (req, res) => {
   try {
     const { name, code, departmentId, academicYear, courseType, entryType, totalIntake, quotas } = req.body;
     
+    // Check if code already exists
+    const existingProgram = await Program.findOne({ code });
+    if (existingProgram) {
+      return res.status(400).json({ message: 'Program code already exists' });
+    }
+    
     // Validate quota sum equals total intake
     const quotaSum = quotas.reduce((sum, q) => sum + q.seats, 0);
     if (quotaSum !== totalIntake) {

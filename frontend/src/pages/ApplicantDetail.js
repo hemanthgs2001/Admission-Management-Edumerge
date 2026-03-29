@@ -263,7 +263,6 @@ const ApplicantDetail = () => {
             <p><strong>Entry Type:</strong> {applicant.entryType}</p>
             <p><strong>Quota Type:</strong> {applicant.quotaType}</p>
             <p><strong>Marks:</strong> {applicant.marks}%</p>
-            <p><strong>Qualifying Exam:</strong> {applicant.qualifyingExam}</p>
             {applicant.allotmentNumber && (
               <p><strong>Allotment Number:</strong> <span className="font-mono bg-gray-700 px-2 py-1 rounded">{applicant.allotmentNumber}</span></p>
             )}

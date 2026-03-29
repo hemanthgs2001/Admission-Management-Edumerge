@@ -6,21 +6,46 @@
   body {
     @apply antialiased bg-gray-900;
   }
-  
+
+  /* ── Kill browser autofill yellow / white background ─────────────────────
+     Chrome/Edge inject a yellow or white tint via internal UA styles.
+     The only reliable fix is to use a very long transition on background-color
+     and box-shadow so the browser's colour never visually appears,
+     then force the text colour we want.                                      */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active,
+  textarea:-webkit-autofill,
+  textarea:-webkit-autofill:hover,
+  textarea:-webkit-autofill:focus,
+  select:-webkit-autofill,
+  select:-webkit-autofill:hover,
+  select:-webkit-autofill:focus {
+    /* Push the browser's autofill background way into the future so it never shows */
+    -webkit-transition: background-color 9999s ease-in-out 0s;
+    transition: background-color 9999s ease-in-out 0s;
+    /* Override the autofill text colour to match our theme */
+    -webkit-text-fill-color: #f3f4f6 !important; /* gray-100 */
+    /* Remove the inset box-shadow the browser adds */
+    box-shadow: 0 0 0px 1000px #374151 inset !important; /* gray-700 — matches inputBase bg */
+    caret-color: #f3f4f6;
+  }
+
   /* Custom scrollbar for dark theme */
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
-  
+
   ::-webkit-scrollbar-track {
     @apply bg-gray-800;
   }
-  
+
   ::-webkit-scrollbar-thumb {
     @apply bg-gray-600 rounded-full;
   }
-  
+
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-cyan-600;
   }
@@ -31,59 +56,59 @@
   .stat-card {
     @apply bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-cyan-500/10 hover:shadow-xl;
   }
-  
+
   /* Button Styles */
   .btn-primary {
     @apply bg-gradient-to-r from-cyan-600 to-teal-600 text-white px-6 py-2 rounded-lg hover:from-cyan-700 hover:to-teal-700 transition-all duration-200 shadow-lg hover:shadow-cyan-500/25;
   }
-  
+
   .btn-secondary {
     @apply bg-gray-700 text-gray-300 px-6 py-2 rounded-lg hover:bg-gray-600 transition-all duration-200;
   }
-  
+
   .btn-danger {
     @apply bg-red-600/20 text-red-400 px-6 py-2 rounded-lg hover:bg-red-600 hover:text-white transition-all duration-200;
   }
-  
+
   /* Form Input Styles */
   .input-field {
     @apply mt-1 block w-full rounded-lg border-gray-700 bg-gray-800 text-gray-100 shadow-sm focus:border-cyan-500 focus:ring focus:ring-cyan-500/20 transition-all duration-200;
   }
-  
+
   /* Table Styles */
   .table-container {
     @apply bg-gray-800 rounded-xl shadow-lg overflow-hidden border border-gray-700;
   }
-  
+
   .table-header {
     @apply px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider bg-gray-900;
   }
-  
+
   .table-cell {
     @apply px-6 py-4 whitespace-nowrap text-sm text-gray-300;
   }
-  
+
   /* Status Badges */
   .status-badge {
     @apply px-2 py-1 text-xs font-semibold rounded-full;
   }
-  
+
   .status-success {
     @apply bg-green-500/20 text-green-400;
   }
-  
+
   .status-warning {
     @apply bg-yellow-500/20 text-yellow-400;
   }
-  
+
   .status-danger {
     @apply bg-red-500/20 text-red-400;
   }
-  
+
   .status-info {
     @apply bg-cyan-500/20 text-cyan-400;
   }
-  
+
   /* Loading Animation - Fixed */
   .loading-spinner {
     @apply w-8 h-8 border-2 border-gray-700 border-t-cyan-500 rounded-full;

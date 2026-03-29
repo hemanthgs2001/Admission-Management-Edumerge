@@ -70,25 +70,6 @@ const Layout = () => {
           ))}
         </nav>
 
-        {/* System Status */}
-        <div className="absolute bottom-20 left-0 right-0 px-4">
-          <div className="bg-gray-800 rounded-lg p-3 border border-gray-700">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-400 flex items-center gap-2">
-                <FiHardDrive className="text-cyan-400" />
-                Storage
-              </span>
-              <span className="text-cyan-400">75%</span>
-            </div>
-            <div className="mt-2 h-1 bg-gray-700 rounded-full overflow-hidden">
-              <div className="h-full w-3/4 bg-gradient-to-r from-cyan-500 to-teal-500 rounded-full"></div>
-            </div>
-            <div className="flex justify-between text-xs mt-2">
-              <span className="text-gray-500">v2.0.1</span>
-            </div>
-          </div>
-        </div>
-
         {/* Logout Button */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-800 bg-gray-900">
           <button
