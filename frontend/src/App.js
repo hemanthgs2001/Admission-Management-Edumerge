@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -10,7 +10,6 @@ import Applicants from './pages/Applicants';
 import ApplicantForm from './pages/ApplicantForm';
 import ApplicantDetail from './pages/ApplicantDetail';
 import Layout from './components/Layout';
-import { useAuth } from './context/AuthContext';
 
 // Route wrapper component for role-based access
 const RoleBasedRoute = ({ children, allowedRoles }) => {
@@ -28,8 +27,6 @@ const RoleBasedRoute = ({ children, allowedRoles }) => {
 };
 
 function AppRoutes() {
-  const { user } = useAuth();
-  
   return (
     <Routes>
       <Route path="/login" element={<Login />} />

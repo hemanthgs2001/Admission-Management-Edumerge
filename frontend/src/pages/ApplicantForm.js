@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -47,12 +47,6 @@ const ApplicantForm = () => {
     fetchPrograms();
   }, []);
 
-  useEffect(() => {
-    if (selectedProgram && admissionType) {
-      checkSeatAvailability();
-    }
-  }, [selectedProgram, admissionType]);
-
   const fetchPrograms = async () => {
     try {
       const response = await axios.get('http://localhost:5000/api/masters/programs');
@@ -62,7 +56,7 @@ const ApplicantForm = () => {
     }
   };
 
-  const checkSeatAvailability = async () => {
+  const checkSeatAvailability = useCallback(async () => {
     setCheckingSeats(true);
     const availability = {
       KCET: null,
@@ -81,9 +75,14 @@ const ApplicantForm = () => {
     
     setSeatAvailability(availability);
     setCheckingSeats(false);
-  };
+  }, [selectedProgram]);
 
-  // Check if email is unique
+  useEffect(() => {
+    if (selectedProgram && admissionType) {
+      checkSeatAvailability();
+    }
+  }, [selectedProgram, admissionType, checkSeatAvailability]);
+
   const checkEmailUniqueness = async (email) => {
     if (!email) {
       setUniquenessStatus(prev => ({
@@ -117,7 +116,6 @@ const ApplicantForm = () => {
     }
   };
 
-  // Check if phone is unique
   const checkPhoneUniqueness = async (phone) => {
     if (!phone) {
       setUniquenessStatus(prev => ({
@@ -151,7 +149,6 @@ const ApplicantForm = () => {
     }
   };
 
-  // Check if allotment number is unique (only for government admission)
   const checkAllotmentNumberUniqueness = async (allotmentNumber) => {
     if (!allotmentNumber || admissionType !== 'government') {
       setUniquenessStatus(prev => ({
@@ -234,9 +231,7 @@ const ApplicantForm = () => {
       [name]: value,
     });
 
-    // Trigger uniqueness checks
     if (name === 'email') {
-      // Validate email format
       const emailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
       if (value && !emailRegex.test(value)) {
         setUniquenessStatus(prev => ({
@@ -249,7 +244,6 @@ const ApplicantForm = () => {
     }
     
     if (name === 'phone') {
-      // Validate Indian phone number (10 digits with optional +91 prefix)
       const phoneRegex = /^(\+91)?[6-9]\d{9}$/;
       if (value && !phoneRegex.test(value)) {
         setUniquenessStatus(prev => ({
@@ -274,31 +268,26 @@ const ApplicantForm = () => {
   };
 
   const validateForm = () => {
-    // Check email uniqueness and format
     if (!uniquenessStatus.email.isValid) {
       toast.error(uniquenessStatus.email.message);
       return false;
     }
     
-    // Check phone uniqueness and format
     if (!uniquenessStatus.phone.isValid) {
       toast.error(uniquenessStatus.phone.message);
       return false;
     }
     
-    // Check allotment number uniqueness for government admission
     if (admissionType === 'government' && formData.quotaType && !uniquenessStatus.allotmentNumber.isValid) {
       toast.error(uniquenessStatus.allotmentNumber.message);
       return false;
     }
     
-    // Check if quota is selected
     if (!formData.quotaType) {
       toast.error('Please select a quota type');
       return false;
     }
     
-    // Check seat availability again before submission
     const availability = seatAvailability[formData.quotaType];
     if (availability && !availability.isAvailable) {
       toast.error(`No seats available in ${formData.quotaType} quota. All seats are filled.`);
@@ -320,7 +309,6 @@ const ApplicantForm = () => {
       const submitData = { ...formData };
       const response = await axios.post('http://localhost:5000/api/applicants', submitData);
       toast.success('Applicant created successfully! Redirecting to details page...');
-      // Redirect to applicant details page after 1 second
       setTimeout(() => {
         navigate(`/applicants/${response.data._id}`);
       }, 1000);
@@ -334,7 +322,6 @@ const ApplicantForm = () => {
     }
   };
 
-  // Get available quota options based on admission type
   const getAvailableQuotas = () => {
     if (admissionType === 'government') {
       return ['KCET', 'COMEDK'].filter(quota => {
@@ -350,7 +337,6 @@ const ApplicantForm = () => {
     return [];
   };
 
-  // Get current date for max date (18 years ago for age restriction)
   const getMaxDate = () => {
     const today = new Date();
     const eighteenYearsAgo = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
@@ -363,24 +349,23 @@ const ApplicantForm = () => {
     return seventyYearsAgo.toISOString().split('T')[0];
   };
 
-  // If admission type not selected, show selection screen
   if (!admissionType) {
     return (
       <div>
         <h1 className="text-2xl font-bold mb-6">Add New Applicant</h1>
-        <div className="bg-white rounded-lg shadow p-8">
-          <h2 className="text-xl font-semibold mb-6 text-center">Select Admission Type</h2>
+        <div className="bg-gray-800 rounded-xl shadow-lg p-8 border border-gray-700">
+          <h2 className="text-xl font-semibold mb-6 text-center text-gray-100">Select Admission Type</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <button
               onClick={() => handleAdmissionTypeChange('government')}
-              className="bg-blue-500 hover:bg-blue-600 text-white p-8 rounded-lg text-center transition duration-200"
+              className="bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-700 hover:to-teal-700 text-white p-8 rounded-xl text-center transition duration-200"
             >
               <div className="text-2xl font-bold mb-2">Government Admission</div>
               <div className="text-sm">KCET / COMEDK Quota</div>
             </button>
             <button
               onClick={() => handleAdmissionTypeChange('management')}
-              className="bg-green-500 hover:bg-green-600 text-white p-8 rounded-lg text-center transition duration-200"
+              className="bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-700 hover:to-teal-700 text-white p-8 rounded-xl text-center transition duration-200"
             >
               <div className="text-2xl font-bold mb-2">Management Admission</div>
               <div className="text-sm">Management Quota</div>
@@ -388,7 +373,7 @@ const ApplicantForm = () => {
           </div>
           <button
             onClick={() => navigate('/applicants')}
-            className="mt-6 w-full bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md"
+            className="mt-6 w-full bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg"
           >
             Cancel
           </button>
@@ -400,28 +385,27 @@ const ApplicantForm = () => {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">
+        <h1 className="text-2xl font-bold text-gray-100">
           Add New Applicant - {admissionType === 'government' ? 'Government Admission' : 'Management Admission'}
         </h1>
         <button
           onClick={() => setAdmissionType('')}
-          className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600"
+          className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg"
         >
           Back to Selection
         </button>
       </div>
       
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700">
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Program Selection */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Select Program *</label>
+              <label className="block text-sm font-medium text-gray-300">Select Program *</label>
               <select
                 required
                 value={selectedProgram}
                 onChange={handleProgramChange}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="input-field"
               >
                 <option value="">Select Program</option>
                 {programs.map(program => (
@@ -432,19 +416,18 @@ const ApplicantForm = () => {
               </select>
             </div>
 
-            {/* Quota Type Selection with Seat Availability */}
             {selectedProgram && (
               <div>
-                <label className="block text-sm font-medium text-gray-700">Quota Type *</label>
+                <label className="block text-sm font-medium text-gray-300">Quota Type *</label>
                 {checkingSeats ? (
-                  <div className="mt-2 text-gray-500">Checking seat availability...</div>
+                  <div className="mt-2 text-gray-400">Checking seat availability...</div>
                 ) : (
                   <>
                     <select
                       required
                       value={formData.quotaType}
                       onChange={handleQuotaChange}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="input-field"
                     >
                       <option value="">Select Quota</option>
                       {getAvailableQuotas().map(quota => (
@@ -454,7 +437,7 @@ const ApplicantForm = () => {
                       ))}
                     </select>
                     {getAvailableQuotas().length === 0 && (
-                      <p className="mt-2 text-sm text-red-600">
+                      <p className="mt-2 text-sm text-red-400">
                         No seats available in any quota for this program. All seats are filled.
                       </p>
                     )}
@@ -463,10 +446,9 @@ const ApplicantForm = () => {
               </div>
             )}
 
-            {/* Allotment Number for Government Admission */}
             {admissionType === 'government' && formData.quotaType && (
               <div>
-                <label className="block text-sm font-medium text-gray-700">Allotment Number *</label>
+                <label className="block text-sm font-medium text-gray-300">Allotment Number *</label>
                 <input
                   type="text"
                   name="allotmentNumber"
@@ -474,18 +456,18 @@ const ApplicantForm = () => {
                   value={formData.allotmentNumber}
                   onChange={handleChange}
                   placeholder="Enter government allotment number"
-                  className={`mt-1 block w-full rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 ${
+                  className={`input-field ${
                     uniquenessStatus.allotmentNumber.isValid 
-                      ? 'border-gray-300' 
+                      ? 'border-gray-700' 
                       : 'border-red-500'
                   }`}
                 />
                 {checkingUniqueness.allotmentNumber && (
-                  <p className="mt-1 text-xs text-gray-500">Checking...</p>
+                  <p className="mt-1 text-xs text-gray-400">Checking...</p>
                 )}
                 {!checkingUniqueness.allotmentNumber && uniquenessStatus.allotmentNumber.message && (
                   <p className={`mt-1 text-xs ${
-                    uniquenessStatus.allotmentNumber.isValid ? 'text-green-600' : 'text-red-600'
+                    uniquenessStatus.allotmentNumber.isValid ? 'text-green-400' : 'text-red-400'
                   }`}>
                     {uniquenessStatus.allotmentNumber.message}
                   </p>
@@ -494,22 +476,21 @@ const ApplicantForm = () => {
             )}
           </div>
 
-          {/* Personal Information */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Full Name *</label>
+              <label className="block text-sm font-medium text-gray-300">Full Name *</label>
               <input
                 type="text"
                 name="fullName"
                 required
                 value={formData.fullName}
                 onChange={handleChange}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="input-field"
               />
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700">Email *</label>
+              <label className="block text-sm font-medium text-gray-300">Email *</label>
               <input
                 type="email"
                 name="email"
@@ -517,18 +498,18 @@ const ApplicantForm = () => {
                 value={formData.email}
                 onChange={handleChange}
                 placeholder="example@gmail.com"
-                className={`mt-1 block w-full rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 ${
+                className={`input-field ${
                   uniquenessStatus.email.isValid 
-                    ? 'border-gray-300' 
+                    ? 'border-gray-700' 
                     : 'border-red-500'
                 }`}
               />
               {checkingUniqueness.email && (
-                <p className="mt-1 text-xs text-gray-500">Checking availability...</p>
+                <p className="mt-1 text-xs text-gray-400">Checking availability...</p>
               )}
               {!checkingUniqueness.email && uniquenessStatus.email.message && (
                 <p className={`mt-1 text-xs ${
-                  uniquenessStatus.email.isValid ? 'text-green-600' : 'text-red-600'
+                  uniquenessStatus.email.isValid ? 'text-green-400' : 'text-red-400'
                 }`}>
                   {uniquenessStatus.email.message}
                 </p>
@@ -536,7 +517,7 @@ const ApplicantForm = () => {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700">Phone *</label>
+              <label className="block text-sm font-medium text-gray-300">Phone *</label>
               <input
                 type="tel"
                 name="phone"
@@ -544,18 +525,18 @@ const ApplicantForm = () => {
                 value={formData.phone}
                 onChange={handleChange}
                 placeholder="+919876543210 or 9876543210"
-                className={`mt-1 block w-full rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 ${
+                className={`input-field ${
                   uniquenessStatus.phone.isValid 
-                    ? 'border-gray-300' 
+                    ? 'border-gray-700' 
                     : 'border-red-500'
                 }`}
               />
               {checkingUniqueness.phone && (
-                <p className="mt-1 text-xs text-gray-500">Checking availability...</p>
+                <p className="mt-1 text-xs text-gray-400">Checking availability...</p>
               )}
               {!checkingUniqueness.phone && uniquenessStatus.phone.message && (
                 <p className={`mt-1 text-xs ${
-                  uniquenessStatus.phone.isValid ? 'text-green-600' : 'text-red-600'
+                  uniquenessStatus.phone.isValid ? 'text-green-400' : 'text-red-400'
                 }`}>
                   {uniquenessStatus.phone.message}
                 </p>
@@ -563,7 +544,7 @@ const ApplicantForm = () => {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700">Date of Birth *</label>
+              <label className="block text-sm font-medium text-gray-300">Date of Birth *</label>
               <input
                 type="date"
                 name="dateOfBirth"
@@ -572,49 +553,49 @@ const ApplicantForm = () => {
                 onChange={handleDateChange}
                 min={getMinDate()}
                 max={getMaxDate()}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="input-field"
               />
               <p className="mt-1 text-xs text-gray-500">Click the calendar icon to select date (Age must be between 18 and 70 years)</p>
             </div>
             
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700">Address *</label>
+              <label className="block text-sm font-medium text-gray-300">Address *</label>
               <textarea
                 name="address"
                 required
                 value={formData.address}
                 onChange={handleChange}
                 rows="2"
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="input-field"
               />
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700">City *</label>
+              <label className="block text-sm font-medium text-gray-300">City *</label>
               <input
                 type="text"
                 name="city"
                 required
                 value={formData.city}
                 onChange={handleChange}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="input-field"
               />
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700">State *</label>
+              <label className="block text-sm font-medium text-gray-300">State *</label>
               <input
                 type="text"
                 name="state"
                 required
                 value={formData.state}
                 onChange={handleChange}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="input-field"
               />
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700">Pincode *</label>
+              <label className="block text-sm font-medium text-gray-300">Pincode *</label>
               <input
                 type="text"
                 name="pincode"
@@ -623,18 +604,18 @@ const ApplicantForm = () => {
                 title="Pincode must be 6 digits"
                 value={formData.pincode}
                 onChange={handleChange}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="input-field"
               />
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700">Category *</label>
+              <label className="block text-sm font-medium text-gray-300">Category *</label>
               <select
                 name="category"
                 required
                 value={formData.category}
                 onChange={handleChange}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="input-field"
               >
                 <option value="">Select Category</option>
                 <option value="GM">GM</option>
@@ -645,13 +626,13 @@ const ApplicantForm = () => {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700">Entry Type *</label>
+              <label className="block text-sm font-medium text-gray-300">Entry Type *</label>
               <select
                 name="entryType"
                 required
                 value={formData.entryType}
                 onChange={handleChange}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="input-field"
               >
                 <option value="">Select Entry Type</option>
                 <option value="Regular">Regular</option>
@@ -660,7 +641,7 @@ const ApplicantForm = () => {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700">Marks (%) *</label>
+              <label className="block text-sm font-medium text-gray-300">Marks (%) *</label>
               <input
                 type="number"
                 name="marks"
@@ -670,12 +651,12 @@ const ApplicantForm = () => {
                 max="100"
                 value={formData.marks}
                 onChange={handleChange}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="input-field"
               />
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700">Qualifying Exam *</label>
+              <label className="block text-sm font-medium text-gray-300">Qualifying Exam *</label>
               <input
                 type="text"
                 name="qualifyingExam"
@@ -683,7 +664,7 @@ const ApplicantForm = () => {
                 value={formData.qualifyingExam}
                 onChange={handleChange}
                 placeholder="e.g., KCET, COMEDK, CBSE, etc."
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="input-field"
               />
             </div>
           </div>
@@ -692,17 +673,17 @@ const ApplicantForm = () => {
             <button
               type="button"
               onClick={() => navigate('/applicants')}
-              className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600"
+              className="btn-secondary"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading || getAvailableQuotas().length === 0 || !uniquenessStatus.email.isValid || !uniquenessStatus.phone.isValid || (admissionType === 'government' && formData.quotaType && !uniquenessStatus.allotmentNumber.isValid)}
-              className={`px-4 py-2 rounded-md text-white ${
-                loading || getAvailableQuotas().length === 0 || !uniquenessStatus.email.isValid || !uniquenessStatus.phone.isValid || (admissionType === 'government' && formData.quotaType && !uniquenessStatus.allotmentNumber.isValid)
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-blue-500 hover:bg-blue-600'
+              className={`btn-primary ${
+                (loading || getAvailableQuotas().length === 0 || !uniquenessStatus.email.isValid || !uniquenessStatus.phone.isValid || (admissionType === 'government' && formData.quotaType && !uniquenessStatus.allotmentNumber.isValid))
+                  ? 'opacity-50 cursor-not-allowed'
+                  : ''
               }`}
             >
               {loading ? 'Creating...' : 'Create Applicant'}

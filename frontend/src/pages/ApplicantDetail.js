@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -10,28 +10,17 @@ const ApplicantDetail = () => {
   const { user } = useAuth();
   const [applicant, setApplicant] = useState(null);
   const [programs, setPrograms] = useState([]);
+  const [filteredPrograms, setFilteredPrograms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [remainingSeats, setRemainingSeats] = useState(null);
+  const [checkingSeats, setCheckingSeats] = useState(false);
   const [allocateForm, setAllocateForm] = useState({
     programId: '',
     quotaName: '',
     allotmentNumber: '',
   });
 
-  useEffect(() => {
-    fetchApplicant();
-    fetchPrograms();
-  }, [id]);
-
-  useEffect(() => {
-    if (allocateForm.programId && allocateForm.quotaName) {
-      checkRemainingSeats();
-    } else {
-      setRemainingSeats(null);
-    }
-  }, [allocateForm.programId, allocateForm.quotaName]);
-
-  const fetchApplicant = async () => {
+  const fetchApplicant = useCallback(async () => {
     try {
       const response = await axios.get(`http://localhost:5000/api/applicants/${id}`);
       setApplicant(response.data);
@@ -41,25 +30,90 @@ const ApplicantDetail = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, navigate]);
 
-  const fetchPrograms = async () => {
+  const fetchPrograms = useCallback(async () => {
     try {
       const response = await axios.get('http://localhost:5000/api/masters/programs');
       setPrograms(response.data);
     } catch (error) {
       toast.error('Failed to fetch programs');
     }
-  };
+  }, []);
 
-  const checkRemainingSeats = async () => {
+  const filterProgramsByQuota = useCallback(async () => {
+    if (!applicant || !applicant.quotaType) return;
+    
+    setCheckingSeats(true);
+    const availablePrograms = [];
+    
+    for (const program of programs) {
+      try {
+        const response = await axios.get(`http://localhost:5000/api/applicants/remaining-seats/${program._id}/${applicant.quotaType}`);
+        if (response.data.isAvailable) {
+          availablePrograms.push({
+            ...program,
+            remainingSeats: response.data.remainingSeats,
+            totalSeats: response.data.totalSeats,
+            filledSeats: response.data.filledSeats
+          });
+        }
+      } catch (error) {
+        console.error(`Error checking seats for program ${program.name}:`, error);
+      }
+    }
+    
+    setFilteredPrograms(availablePrograms);
+    setCheckingSeats(false);
+    
+    if (availablePrograms.length === 0) {
+      toast.error(`No programs available with seats in ${applicant.quotaType} quota`);
+    }
+  }, [applicant, programs]);
+
+  const checkRemainingSeats = useCallback(async () => {
+    if (!allocateForm.programId || !allocateForm.quotaName) return;
+    
     try {
       const response = await axios.get(`http://localhost:5000/api/applicants/remaining-seats/${allocateForm.programId}/${allocateForm.quotaName}`);
       setRemainingSeats(response.data);
     } catch (error) {
       setRemainingSeats(null);
     }
-  };
+  }, [allocateForm.programId, allocateForm.quotaName]);
+
+  useEffect(() => {
+    fetchApplicant();
+    fetchPrograms();
+  }, [fetchApplicant, fetchPrograms]);
+
+  useEffect(() => {
+    if (applicant && !applicant.program) {
+      if (applicant.quotaType && !allocateForm.quotaName) {
+        setAllocateForm(prev => ({
+          ...prev,
+          quotaName: applicant.quotaType
+        }));
+      }
+      
+      if (applicant.allotmentNumber && !allocateForm.allotmentNumber) {
+        setAllocateForm(prev => ({
+          ...prev,
+          allotmentNumber: applicant.allotmentNumber
+        }));
+      }
+    }
+  }, [applicant, allocateForm.quotaName, allocateForm.allotmentNumber]);
+
+  useEffect(() => {
+    if (programs.length > 0 && applicant) {
+      filterProgramsByQuota();
+    }
+  }, [programs, applicant, filterProgramsByQuota]);
+
+  useEffect(() => {
+    checkRemainingSeats();
+  }, [checkRemainingSeats]);
 
   const handleAllocateSeat = async () => {
     if (!remainingSeats || !remainingSeats.isAvailable) {
@@ -75,7 +129,6 @@ const ApplicantDetail = () => {
       toast.success(`✓ Seat allocated successfully! Remaining seats: ${response.data.remainingSeatsAfterAllocation}`);
       fetchApplicant();
       setRemainingSeats(null);
-      setAllocateForm({ programId: '', quotaName: '', allotmentNumber: '' });
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to allocate seat');
     }
@@ -114,7 +167,6 @@ const ApplicantDetail = () => {
       });
       toast.success(`✓ Admission confirmed! Admission Number: ${response.data.admissionNumber}`);
       toast.success('Redirecting to applicants list...');
-      // Redirect to applicants list after 2 seconds
       setTimeout(() => {
         navigate('/applicants');
       }, 2000);
@@ -124,14 +176,20 @@ const ApplicantDetail = () => {
   };
 
   if (loading) {
-    return <div className="text-center">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <div className="loading-spinner mx-auto"></div>
+          <p className="mt-4 text-gray-400">Loading applicant details...</p>
+        </div>
+      </div>
+    );
   }
 
   if (!applicant) {
-    return <div className="text-center">Applicant not found</div>;
+    return <div className="text-center text-gray-400">Applicant not found</div>;
   }
 
-  // Determine admission journey steps
   const journeySteps = [
     { name: 'Create Applicant', completed: true, current: true },
     { name: applicant.quotaType === 'Management' ? 'Select Program & Check Availability' : 'Enter Allotment Details', 
@@ -164,28 +222,27 @@ const ApplicantDetail = () => {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Applicant Details</h1>
+        <h1 className="text-2xl font-bold text-gray-100">Applicant Details</h1>
         <button
           onClick={() => navigate('/applicants')}
-          className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600"
+          className="btn-secondary"
         >
           Back to List
         </button>
       </div>
 
-      {/* Journey Progress */}
-      <div className="mb-6 bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold mb-4">Admission Journey Progress</h2>
+      <div className="mb-6 bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700">
+        <h2 className="text-lg font-semibold text-gray-100 mb-4">Admission Journey Progress</h2>
         <div className="flex items-center justify-between">
           {journeySteps.map((step, index) => (
             <div key={index} className="flex-1 text-center">
               <div className={`w-8 h-8 mx-auto rounded-full flex items-center justify-center ${
                 step.completed ? 'bg-green-500 text-white' : 
-                step.current ? 'bg-blue-500 text-white' : 'bg-gray-300 text-gray-600'
+                step.current ? 'bg-cyan-500 text-white' : 'bg-gray-700 text-gray-400'
               }`}>
                 {step.completed ? '✓' : index + 1}
               </div>
-              <p className={`text-xs mt-2 ${step.completed ? 'text-green-600' : step.current ? 'text-blue-600 font-semibold' : 'text-gray-500'}`}>
+              <p className={`text-xs mt-2 ${step.completed ? 'text-green-400' : step.current ? 'text-cyan-400 font-semibold' : 'text-gray-500'}`}>
                 {step.name}
               </p>
             </div>
@@ -194,10 +251,9 @@ const ApplicantDetail = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Personal Information */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-4">Personal Information</h2>
-          <div className="space-y-2">
+        <div className="bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700">
+          <h2 className="text-lg font-semibold text-gray-100 mb-4">Personal Information</h2>
+          <div className="space-y-2 text-gray-300">
             <p><strong>Name:</strong> {applicant.fullName}</p>
             <p><strong>Email:</strong> {applicant.email}</p>
             <p><strong>Phone:</strong> {applicant.phone}</p>
@@ -209,46 +265,45 @@ const ApplicantDetail = () => {
             <p><strong>Marks:</strong> {applicant.marks}%</p>
             <p><strong>Qualifying Exam:</strong> {applicant.qualifyingExam}</p>
             {applicant.allotmentNumber && (
-              <p><strong>Allotment Number:</strong> <span className="font-mono bg-gray-100 px-2 py-1 rounded">{applicant.allotmentNumber}</span></p>
+              <p><strong>Allotment Number:</strong> <span className="font-mono bg-gray-700 px-2 py-1 rounded">{applicant.allotmentNumber}</span></p>
             )}
             {applicant.admissionNumber && (
-              <p><strong>Admission Number:</strong> <span className="font-mono bg-green-100 px-2 py-1 rounded">{applicant.admissionNumber}</span></p>
+              <p><strong>Admission Number:</strong> <span className="font-mono bg-green-900/30 text-green-400 px-2 py-1 rounded">{applicant.admissionNumber}</span></p>
             )}
           </div>
         </div>
 
-        {/* Admission Status */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-4">Admission Status</h2>
+        <div className="bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700">
+          <h2 className="text-lg font-semibold text-gray-100 mb-4">Admission Status</h2>
           <div className="space-y-4">
             <div>
-              <p className="font-medium">Program:</p>
-              <p>{applicant.program?.name || 'Not Allocated'}</p>
+              <p className="font-medium text-gray-300">Program:</p>
+              <p className="text-gray-400">{applicant.program?.name || 'Not Allocated'}</p>
             </div>
             <div>
-              <p className="font-medium">Documents Status:</p>
+              <p className="font-medium text-gray-300">Documents Status:</p>
               <p className={`inline-block px-2 py-1 rounded-full text-sm ${
-                applicant.documents.status === 'Verified' ? 'bg-green-100 text-green-800' :
-                applicant.documents.status === 'Submitted' ? 'bg-blue-100 text-blue-800' :
-                'bg-yellow-100 text-yellow-800'
+                applicant.documents.status === 'Verified' ? 'bg-green-500/20 text-green-400' :
+                applicant.documents.status === 'Submitted' ? 'bg-cyan-500/20 text-cyan-400' :
+                'bg-yellow-500/20 text-yellow-400'
               }`}>
                 {applicant.documents.status}
               </p>
             </div>
             <div>
-              <p className="font-medium">Fee Status:</p>
+              <p className="font-medium text-gray-300">Fee Status:</p>
               <p className={`inline-block px-2 py-1 rounded-full text-sm ${
-                applicant.feeStatus === 'Paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                applicant.feeStatus === 'Paid' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
               }`}>
                 {applicant.feeStatus}
               </p>
             </div>
             <div>
-              <p className="font-medium">Admission Status:</p>
+              <p className="font-medium text-gray-300">Admission Status:</p>
               <p className={`inline-block px-2 py-1 rounded-full text-sm ${
-                applicant.admissionStatus === 'Confirmed' ? 'bg-green-100 text-green-800' :
-                applicant.admissionStatus === 'Allocated' ? 'bg-blue-100 text-blue-800' :
-                'bg-yellow-100 text-yellow-800'
+                applicant.admissionStatus === 'Confirmed' ? 'bg-green-500/20 text-green-400' :
+                applicant.admissionStatus === 'Allocated' ? 'bg-cyan-500/20 text-cyan-400' :
+                'bg-yellow-500/20 text-yellow-400'
               }`}>
                 {applicant.admissionStatus}
               </p>
@@ -257,65 +312,73 @@ const ApplicantDetail = () => {
         </div>
       </div>
 
-      {/* Actions */}
       {(user?.role === 'admin' || user?.role === 'admission_officer') && (
         <div className="mt-6 space-y-6">
-          {/* Step 2 & 3: Allocate Seat */}
           {canAllocate && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold mb-4">
+            <div className="bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700">
+              <h2 className="text-lg font-semibold text-gray-100 mb-4">
                 {applicant.quotaType === 'Management' ? 'Step 2 & 3: Select Program & Allocate Seat' : 'Step 2 & 3: Enter Allotment Details & Allocate Seat'}
               </h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Program</label>
-                  <select
-                    value={allocateForm.programId}
-                    onChange={(e) => setAllocateForm({ ...allocateForm, programId: e.target.value })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  >
-                    <option value="">Select Program</option>
-                    {programs.map(program => (
-                      <option key={program._id} value={program._id}>{program.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Quota</label>
-                  <select
-                    value={allocateForm.quotaName}
-                    onChange={(e) => setAllocateForm({ ...allocateForm, quotaName: e.target.value })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  >
-                    <option value="">Select Quota</option>
-                    <option value="KCET">KCET</option>
-                    <option value="COMEDK">COMEDK</option>
-                    <option value="Management">Management</option>
-                  </select>
+                  <label className="block text-sm font-medium text-gray-300">Program *</label>
+                  {checkingSeats ? (
+                    <div className="mt-2 text-gray-400">Loading available programs...</div>
+                  ) : (
+                    <>
+                      <select
+                        value={allocateForm.programId}
+                        onChange={(e) => setAllocateForm({ ...allocateForm, programId: e.target.value })}
+                        className="input-field"
+                        required
+                      >
+                        <option value="">Select Program</option>
+                        {filteredPrograms.map(program => (
+                          <option key={program._id} value={program._id}>
+                            {program.name} ({program.code}) - Available: {program.remainingSeats} / {program.totalSeats} seats
+                          </option>
+                        ))}
+                      </select>
+                      {filteredPrograms.length === 0 && !checkingSeats && (
+                        <p className="mt-2 text-sm text-red-400">
+                          No programs available with available seats in {applicant.quotaType} quota.
+                        </p>
+                      )}
+                    </>
+                  )}
                 </div>
                 
-                {/* Government: Allotment Number */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300">Quota *</label>
+                  <input
+                    type="text"
+                    value={applicant.quotaType}
+                    disabled
+                    className="input-field bg-gray-700 cursor-not-allowed"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Quota is pre-filled from applicant data and cannot be changed</p>
+                </div>
+                
                 {(applicant.quotaType === 'KCET' || applicant.quotaType === 'COMEDK') && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Allotment Number</label>
+                    <label className="block text-sm font-medium text-gray-300">Allotment Number *</label>
                     <input
                       type="text"
-                      value={allocateForm.allotmentNumber}
-                      onChange={(e) => setAllocateForm({ ...allocateForm, allotmentNumber: e.target.value })}
-                      placeholder="Enter government allotment number"
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      value={applicant.allotmentNumber || ''}
+                      disabled
+                      className="input-field bg-gray-700 cursor-not-allowed"
                     />
+                    <p className="text-xs text-gray-500 mt-1">Allotment number is pre-filled from applicant data and cannot be changed</p>
                   </div>
                 )}
                 
-                {/* Seat Availability */}
                 {remainingSeats && (
-                  <div className={`p-3 rounded-md ${remainingSeats.isAvailable ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-                    <p className="text-sm font-medium">Seat Availability:</p>
+                  <div className={`p-3 rounded-md ${remainingSeats.isAvailable ? 'bg-green-500/10 border border-green-500/30' : 'bg-red-500/10 border border-red-500/30'}`}>
+                    <p className="text-sm font-medium text-gray-300">Seat Availability for Selected Program:</p>
                     <div className="grid grid-cols-3 gap-2 mt-1 text-sm">
-                      <div>Total: <strong>{remainingSeats.totalSeats}</strong></div>
-                      <div>Filled: <strong>{remainingSeats.filledSeats}</strong></div>
-                      <div>Available: <strong className={remainingSeats.isAvailable ? 'text-green-600' : 'text-red-600'}>
+                      <div>Total Seats: <strong className="text-gray-200">{remainingSeats.totalSeats}</strong></div>
+                      <div>Filled Seats: <strong className="text-gray-200">{remainingSeats.filledSeats}</strong></div>
+                      <div>Available: <strong className={remainingSeats.isAvailable ? 'text-green-400' : 'text-red-400'}>
                         {remainingSeats.remainingSeats}
                       </strong></div>
                     </div>
@@ -324,33 +387,32 @@ const ApplicantDetail = () => {
                 
                 <button
                   onClick={handleAllocateSeat}
-                  disabled={!remainingSeats || !remainingSeats.isAvailable || !allocateForm.programId || !allocateForm.quotaName}
-                  className={`px-4 py-2 rounded-md text-white ${
-                    remainingSeats && remainingSeats.isAvailable && allocateForm.programId && allocateForm.quotaName
-                      ? 'bg-blue-500 hover:bg-blue-600'
-                      : 'bg-gray-400 cursor-not-allowed'
+                  disabled={!remainingSeats || !remainingSeats.isAvailable || !allocateForm.programId || filteredPrograms.length === 0}
+                  className={`btn-primary ${
+                    remainingSeats && remainingSeats.isAvailable && allocateForm.programId && filteredPrograms.length > 0
+                      ? ''
+                      : 'opacity-50 cursor-not-allowed'
                   }`}
                 >
-                  {remainingSeats && remainingSeats.isAvailable ? 'Allocate Seat & Lock Seat' : 'Check Seat Availability First'}
+                  Allocate Seat & Lock Seat
                 </button>
               </div>
             </div>
           )}
 
-          {/* Step 4: Verify Documents */}
           {canVerifyDocuments && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold mb-4">Step 4: Document Verification</h2>
+            <div className="bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700">
+              <h2 className="text-lg font-semibold text-gray-100 mb-4">Step 4: Document Verification</h2>
               <div className="space-x-4">
                 <button
                   onClick={() => handleUpdateDocuments('Submitted')}
-                  className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600"
+                  className="btn-secondary"
                 >
                   Mark Documents as Submitted
                 </button>
                 <button
                   onClick={() => handleUpdateDocuments('Verified')}
-                  className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600"
+                  className="btn-primary"
                 >
                   Verify Documents
                 </button>
@@ -361,32 +423,29 @@ const ApplicantDetail = () => {
             </div>
           )}
 
-          {/* Step 5: Fee Payment */}
           {canUpdateFee && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold mb-4">Step 5: Fee Payment</h2>
+            <div className="bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700">
+              <h2 className="text-lg font-semibold text-gray-100 mb-4">Step 5: Fee Payment</h2>
               <button
                 onClick={() => handleUpdateFee('Paid')}
-                className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600"
+                className="btn-primary"
               >
                 Mark Fee as Paid
               </button>
             </div>
           )}
 
-          {/* Step 6: Generate Admission Number */}
           {canConfirm && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold mb-4">Step 6: Generate Admission Number & Confirm</h2>
-              <p className="text-sm text-gray-600 mb-4">
-                Admission number will be generated in format: <strong>INSTITUTE_CODE/YEAR/COURSE_TYPE/PROGRAM_CODE/QUOTA_TYPE/SEQUENCE</strong>
-              </p>
-              <p className="text-sm text-gray-600 mb-4">
-                Example: <strong>ABCE/2026/UG/CSE/KCET/0001</strong>
-              </p>
+            <div className="bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700">
+              <h2 className="text-lg font-semibold text-gray-100 mb-4">Step 6: Generate Admission Number & Confirm</h2>
+              <div className="bg-cyan-500/10 p-3 rounded-md mb-4 border border-cyan-500/30">
+                <p className="text-sm font-medium text-cyan-400">Admission Number Format:</p>
+                <p className="text-sm text-gray-300 font-mono">INSTITUTE_CODE/YEAR/COURSE_TYPE/PROGRAM_CODE/QUOTA_TYPE/SEQUENCE</p>
+                <p className="text-xs text-gray-400 mt-1">Example: ABCE/2026/UG/CSE/KCET/0001</p>
+              </div>
               <button
                 onClick={handleConfirmAdmission}
-                className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600"
+                className="btn-primary"
               >
                 Generate Admission Number & Confirm Admission
               </button>
