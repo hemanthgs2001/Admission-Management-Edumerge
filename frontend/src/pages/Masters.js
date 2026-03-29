@@ -74,7 +74,20 @@ const Masters = () => {
                 value={formData.name || ''}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                placeholder="e.g., ABC College of Engineering"
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Institution Code</label>
+              <input
+                type="text"
+                required
+                value={formData.code || ''}
+                onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                placeholder="e.g., ABCE"
+              />
+              <p className="text-xs text-gray-500 mt-1">This code will be used in admission number format: CODE/2026/UG/CSE/KCET/0001</p>
             </div>
             <button type="submit" disabled={loading} className="bg-blue-500 text-white px-4 py-2 rounded-md">
               Create Institution
@@ -104,7 +117,7 @@ const Masters = () => {
               >
                 <option value="">Select Institution</option>
                 {institutions.map(inst => (
-                  <option key={inst._id} value={inst._id}>{inst.name}</option>
+                  <option key={inst._id} value={inst._id}>{inst.name} ({inst.code})</option>
                 ))}
               </select>
             </div>
@@ -164,9 +177,11 @@ const Masters = () => {
                 type="text"
                 required
                 value={formData.code || ''}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                placeholder="e.g., CSE, ECE, ME"
               />
+              <p className="text-xs text-gray-500 mt-1">This code will be used in admission number format</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Department</label>
@@ -190,6 +205,7 @@ const Masters = () => {
                 value={formData.academicYear || ''}
                 onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                placeholder="e.g., 2024-2025"
               />
             </div>
             <div>
@@ -253,6 +269,7 @@ const Masters = () => {
                   </div>
                 ))}
               </div>
+              <p className="text-xs text-gray-500 mt-2">Total quota seats must equal total intake</p>
             </div>
             <button type="submit" disabled={loading} className="bg-blue-500 text-white px-4 py-2 rounded-md">
               Create Program
@@ -307,6 +324,7 @@ const Masters = () => {
                   <thead>
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Campuses</th>
                     </tr>
                   </thead>
@@ -314,6 +332,7 @@ const Masters = () => {
                     {institutions.map(inst => (
                       <tr key={inst._id}>
                         <td className="px-6 py-4">{inst.name}</td>
+                        <td className="px-6 py-4"><span className="font-mono font-bold">{inst.code}</span></td>
                         <td className="px-6 py-4">{inst.campuses?.length || 0}</td>
                       </tr>
                     ))}
@@ -333,7 +352,7 @@ const Masters = () => {
                     {campuses.map(campus => (
                       <tr key={campus._id}>
                         <td className="px-6 py-4">{campus.name}</td>
-                        <td className="px-6 py-4">{campus.institution?.name}</td>
+                        <td className="px-6 py-4">{campus.institution?.name} ({campus.institution?.code})</td>
                         <td className="px-6 py-4">{campus.departments?.length || 0}</td>
                       </tr>
                     ))}
@@ -375,7 +394,7 @@ const Masters = () => {
                     {programs.map(program => (
                       <tr key={program._id}>
                         <td className="px-6 py-4">{program.name}</td>
-                        <td className="px-6 py-4">{program.code}</td>
+                        <td className="px-6 py-4"><span className="font-mono">{program.code}</span></td>
                         <td className="px-6 py-4">{program.department?.name}</td>
                         <td className="px-6 py-4">{program.totalIntake}</td>
                         <td className="px-6 py-4">

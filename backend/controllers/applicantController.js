@@ -1,5 +1,6 @@
 const Applicant = require('../models/Applicant');
 const Program = require('../models/Program');
+const Institution = require('../models/Institution');
 
 // Create applicant
 const createApplicant = async (req, res) => {
@@ -135,25 +136,62 @@ const allocateSeat = async (req, res) => {
   }
 };
 
-// Generate unique admission number
+// Generate unique admission number with actual institute name
 const generateAdmissionNumber = async (applicant, program) => {
-  const year = new Date().getFullYear();
-  const programCode = program.code || program.name.substring(0, 3).toUpperCase();
-  const quotaCode = applicant.quotaType;
-  
-  // Get the last admission number to generate sequence
-  const lastApplicant = await Applicant.findOne({
-    admissionNumber: { $regex: `${program.department?.name || 'INST'}/${year}/${program.courseType}/${programCode}/${quotaCode}/`, $exists: true }
-  }).sort({ admissionNumber: -1 });
-  
-  let sequence = 1;
-  if (lastApplicant && lastApplicant.admissionNumber) {
-    const lastSeq = parseInt(lastApplicant.admissionNumber.split('/').pop());
-    sequence = lastSeq + 1;
+  try {
+    // Get institute name from the program's department's campus's institution
+    const programWithDetails = await Program.findById(program._id)
+      .populate({
+        path: 'department',
+        populate: {
+          path: 'campus',
+          populate: {
+            path: 'institution'
+          }
+        }
+      });
+    
+    // Get institute name or code
+    let instituteName = 'INST';
+    if (programWithDetails.department && 
+        programWithDetails.department.campus && 
+        programWithDetails.department.campus.institution) {
+      instituteName = programWithDetails.department.campus.institution.code || 
+                      programWithDetails.department.campus.institution.name.substring(0, 4).toUpperCase();
+    }
+    
+    const year = new Date().getFullYear();
+    const courseType = program.courseType;
+    const programCode = program.code || program.name.substring(0, 3).toUpperCase();
+    const quotaCode = applicant.quotaType;
+    
+    // Get the last admission number to generate sequence
+    const lastApplicant = await Applicant.findOne({
+      admissionNumber: { 
+        $regex: `^${instituteName}/${year}/${courseType}/${programCode}/${quotaCode}/`, 
+        $exists: true 
+      }
+    }).sort({ admissionNumber: -1 });
+    
+    let sequence = 1;
+    if (lastApplicant && lastApplicant.admissionNumber) {
+      const parts = lastApplicant.admissionNumber.split('/');
+      const lastSeq = parseInt(parts[parts.length - 1]);
+      sequence = lastSeq + 1;
+    }
+    
+    const admissionNumber = `${instituteName}/${year}/${courseType}/${programCode}/${quotaCode}/${String(sequence).padStart(4, '0')}`;
+    return admissionNumber;
+  } catch (error) {
+    console.error('Error generating admission number:', error);
+    // Fallback format if institute name not found
+    const year = new Date().getFullYear();
+    const courseType = program.courseType;
+    const programCode = program.code || program.name.substring(0, 3).toUpperCase();
+    const quotaCode = applicant.quotaType;
+    const timestamp = Date.now().toString().slice(-4);
+    return `INST/${year}/${courseType}/${programCode}/${quotaCode}/${timestamp}`;
   }
-  
-  const admissionNumber = `${program.department?.name || 'INST'}/${year}/${program.courseType}/${programCode}/${quotaCode}/${String(sequence).padStart(4, '0')}`;
-  return admissionNumber;
 };
 
 // Confirm admission with fee and document verification
@@ -192,7 +230,7 @@ const confirmAdmission = async (req, res) => {
       });
     }
     
-    // Generate unique and immutable admission number
+    // Generate unique and immutable admission number with actual institute name
     const admissionNumber = await generateAdmissionNumber(applicant, applicant.program);
     
     applicant.admissionNumber = admissionNumber;

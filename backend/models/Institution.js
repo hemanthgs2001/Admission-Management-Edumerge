@@ -5,6 +5,11 @@ const InstitutionSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  code: {
+    type: String,
+    required: true,
+    unique: true,
+  },
   campuses: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Campus',

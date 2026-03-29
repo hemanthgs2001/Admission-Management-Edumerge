@@ -7,8 +7,25 @@ const ApplicantForm = () => {
   const navigate = useNavigate();
   const [programs, setPrograms] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedQuota, setSelectedQuota] = useState('');
-  const [remainingSeats, setRemainingSeats] = useState(null);
+  const [admissionType, setAdmissionType] = useState('');
+  const [selectedProgram, setSelectedProgram] = useState('');
+  const [seatAvailability, setSeatAvailability] = useState({
+    KCET: null,
+    COMEDK: null,
+    Management: null
+  });
+  const [checkingSeats, setCheckingSeats] = useState(false);
+  const [checkingUniqueness, setCheckingUniqueness] = useState({
+    email: false,
+    phone: false,
+    allotmentNumber: false
+  });
+  const [uniquenessStatus, setUniquenessStatus] = useState({
+    email: { isValid: true, message: '' },
+    phone: { isValid: true, message: '' },
+    allotmentNumber: { isValid: true, message: '' }
+  });
+  
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -23,8 +40,7 @@ const ApplicantForm = () => {
     quotaType: '',
     marks: '',
     qualifyingExam: '',
-    allotmentNumber: '', // For government admission
-    programId: '', // For management admission
+    allotmentNumber: '',
   });
 
   useEffect(() => {
@@ -32,13 +48,10 @@ const ApplicantForm = () => {
   }, []);
 
   useEffect(() => {
-    // Check seat availability when program and quota are selected for management admission
-    if (formData.programId && formData.quotaType === 'Management') {
-      checkRemainingSeats();
-    } else {
-      setRemainingSeats(null);
+    if (selectedProgram && admissionType) {
+      checkSeatAvailability();
     }
-  }, [formData.programId, formData.quotaType]);
+  }, [selectedProgram, admissionType]);
 
   const fetchPrograms = async () => {
     try {
@@ -49,123 +62,439 @@ const ApplicantForm = () => {
     }
   };
 
-  const checkRemainingSeats = async () => {
-    try {
-      const response = await axios.get(`http://localhost:5000/api/applicants/remaining-seats/${formData.programId}/Management`);
-      setRemainingSeats(response.data);
-    } catch (error) {
-      setRemainingSeats(null);
+  const checkSeatAvailability = async () => {
+    setCheckingSeats(true);
+    const availability = {
+      KCET: null,
+      COMEDK: null,
+      Management: null
+    };
+    
+    for (const quota of ['KCET', 'COMEDK', 'Management']) {
+      try {
+        const response = await axios.get(`http://localhost:5000/api/applicants/remaining-seats/${selectedProgram}/${quota}`);
+        availability[quota] = response.data;
+      } catch (error) {
+        availability[quota] = null;
+      }
     }
+    
+    setSeatAvailability(availability);
+    setCheckingSeats(false);
+  };
+
+  // Check if email is unique
+  const checkEmailUniqueness = async (email) => {
+    if (!email) {
+      setUniquenessStatus(prev => ({
+        ...prev,
+        email: { isValid: true, message: '' }
+      }));
+      return;
+    }
+
+    setCheckingUniqueness(prev => ({ ...prev, email: true }));
+    try {
+      const response = await axios.get(`http://localhost:5000/api/applicants`);
+      const existingApplicants = response.data;
+      const emailExists = existingApplicants.some(applicant => applicant.email === email);
+      
+      if (emailExists) {
+        setUniquenessStatus(prev => ({
+          ...prev,
+          email: { isValid: false, message: 'This email is already registered. Please use a different email.' }
+        }));
+      } else {
+        setUniquenessStatus(prev => ({
+          ...prev,
+          email: { isValid: true, message: 'Email is available ✓' }
+        }));
+      }
+    } catch (error) {
+      console.error('Error checking email:', error);
+    } finally {
+      setCheckingUniqueness(prev => ({ ...prev, email: false }));
+    }
+  };
+
+  // Check if phone is unique
+  const checkPhoneUniqueness = async (phone) => {
+    if (!phone) {
+      setUniquenessStatus(prev => ({
+        ...prev,
+        phone: { isValid: true, message: '' }
+      }));
+      return;
+    }
+
+    setCheckingUniqueness(prev => ({ ...prev, phone: true }));
+    try {
+      const response = await axios.get(`http://localhost:5000/api/applicants`);
+      const existingApplicants = response.data;
+      const phoneExists = existingApplicants.some(applicant => applicant.phone === phone);
+      
+      if (phoneExists) {
+        setUniquenessStatus(prev => ({
+          ...prev,
+          phone: { isValid: false, message: 'This phone number is already registered. Please use a different number.' }
+        }));
+      } else {
+        setUniquenessStatus(prev => ({
+          ...prev,
+          phone: { isValid: true, message: 'Phone number is available ✓' }
+        }));
+      }
+    } catch (error) {
+      console.error('Error checking phone:', error);
+    } finally {
+      setCheckingUniqueness(prev => ({ ...prev, phone: false }));
+    }
+  };
+
+  // Check if allotment number is unique (only for government admission)
+  const checkAllotmentNumberUniqueness = async (allotmentNumber) => {
+    if (!allotmentNumber || admissionType !== 'government') {
+      setUniquenessStatus(prev => ({
+        ...prev,
+        allotmentNumber: { isValid: true, message: '' }
+      }));
+      return;
+    }
+
+    setCheckingUniqueness(prev => ({ ...prev, allotmentNumber: true }));
+    try {
+      const response = await axios.get(`http://localhost:5000/api/applicants`);
+      const existingApplicants = response.data;
+      const allotmentExists = existingApplicants.some(applicant => applicant.allotmentNumber === allotmentNumber);
+      
+      if (allotmentExists) {
+        setUniquenessStatus(prev => ({
+          ...prev,
+          allotmentNumber: { isValid: false, message: 'This allotment number is already used. Please verify and enter correct number.' }
+        }));
+      } else {
+        setUniquenessStatus(prev => ({
+          ...prev,
+          allotmentNumber: { isValid: true, message: 'Allotment number is valid ✓' }
+        }));
+      }
+    } catch (error) {
+      console.error('Error checking allotment number:', error);
+    } finally {
+      setCheckingUniqueness(prev => ({ ...prev, allotmentNumber: false }));
+    }
+  };
+
+  const handleAdmissionTypeChange = (type) => {
+    setAdmissionType(type);
+    setSelectedProgram('');
+    setFormData({
+      ...formData,
+      quotaType: '',
+      allotmentNumber: ''
+    });
+    setUniquenessStatus({
+      email: { isValid: true, message: '' },
+      phone: { isValid: true, message: '' },
+      allotmentNumber: { isValid: true, message: '' }
+    });
+  };
+
+  const handleProgramChange = (e) => {
+    const programId = e.target.value;
+    setSelectedProgram(programId);
+    setFormData({
+      ...formData,
+      quotaType: '',
+      allotmentNumber: ''
+    });
+  };
+
+  const handleQuotaChange = (e) => {
+    const quotaType = e.target.value;
+    const availability = seatAvailability[quotaType];
+    
+    if (availability && !availability.isAvailable) {
+      toast.error(`No seats available in ${quotaType} quota. All seats are filled.`);
+      return;
+    }
+    
+    setFormData({
+      ...formData,
+      quotaType: quotaType,
+      allotmentNumber: ''
+    });
   };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    
     setFormData({
       ...formData,
       [name]: value,
     });
-    
-    // Reset program selection when quota type changes
-    if (name === 'quotaType') {
-      setSelectedQuota(value);
-      setFormData(prev => ({ ...prev, programId: '' }));
-      setRemainingSeats(null);
+
+    // Trigger uniqueness checks
+    if (name === 'email') {
+      // Validate email format
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+      if (value && !emailRegex.test(value)) {
+        setUniquenessStatus(prev => ({
+          ...prev,
+          email: { isValid: false, message: 'Email must be a valid Gmail address (@gmail.com)' }
+        }));
+      } else {
+        checkEmailUniqueness(value);
+      }
     }
+    
+    if (name === 'phone') {
+      // Validate Indian phone number (10 digits with optional +91 prefix)
+      const phoneRegex = /^(\+91)?[6-9]\d{9}$/;
+      if (value && !phoneRegex.test(value)) {
+        setUniquenessStatus(prev => ({
+          ...prev,
+          phone: { isValid: false, message: 'Phone number must be a valid Indian number (10 digits starting with 6-9, optional +91)' }
+        }));
+      } else {
+        checkPhoneUniqueness(value);
+      }
+    }
+    
+    if (name === 'allotmentNumber') {
+      checkAllotmentNumberUniqueness(value);
+    }
+  };
+
+  const handleDateChange = (e) => {
+    setFormData({
+      ...formData,
+      dateOfBirth: e.target.value
+    });
+  };
+
+  const validateForm = () => {
+    // Check email uniqueness and format
+    if (!uniquenessStatus.email.isValid) {
+      toast.error(uniquenessStatus.email.message);
+      return false;
+    }
+    
+    // Check phone uniqueness and format
+    if (!uniquenessStatus.phone.isValid) {
+      toast.error(uniquenessStatus.phone.message);
+      return false;
+    }
+    
+    // Check allotment number uniqueness for government admission
+    if (admissionType === 'government' && formData.quotaType && !uniquenessStatus.allotmentNumber.isValid) {
+      toast.error(uniquenessStatus.allotmentNumber.message);
+      return false;
+    }
+    
+    // Check if quota is selected
+    if (!formData.quotaType) {
+      toast.error('Please select a quota type');
+      return false;
+    }
+    
+    // Check seat availability again before submission
+    const availability = seatAvailability[formData.quotaType];
+    if (availability && !availability.isAvailable) {
+      toast.error(`No seats available in ${formData.quotaType} quota. All seats are filled.`);
+      return false;
+    }
+    
+    return true;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Validation for management admission
-    if (formData.quotaType === 'Management') {
-      if (!formData.programId) {
-        toast.error('Please select a program for Management quota');
-        return;
-      }
-      if (!remainingSeats || !remainingSeats.isAvailable) {
-        toast.error('No seats available in Management quota for selected program');
-        return;
-      }
-    }
-    
-    // Validation for government admission (KCET/COMEDK)
-    if ((formData.quotaType === 'KCET' || formData.quotaType === 'COMEDK') && !formData.allotmentNumber) {
-      toast.error('Please enter allotment number for government admission');
+    if (!validateForm()) {
       return;
     }
     
     setLoading(true);
     try {
-      // Create applicant first
-      const applicantData = {
-        fullName: formData.fullName,
-        email: formData.email,
-        phone: formData.phone,
-        dateOfBirth: formData.dateOfBirth,
-        address: formData.address,
-        city: formData.city,
-        state: formData.state,
-        pincode: formData.pincode,
-        category: formData.category,
-        entryType: formData.entryType,
-        quotaType: formData.quotaType,
-        marks: parseFloat(formData.marks),
-        qualifyingExam: formData.qualifyingExam,
-      };
-      
-      if (formData.allotmentNumber) {
-        applicantData.allotmentNumber = formData.allotmentNumber;
-      }
-      
-      const response = await axios.post('http://localhost:5000/api/applicants', applicantData);
-      const newApplicant = response.data;
-      
-      // For management admission, allocate seat immediately
-      if (formData.quotaType === 'Management' && formData.programId) {
-        try {
-          await axios.post('http://localhost:5000/api/applicants/allocate', {
-            applicantId: newApplicant._id,
-            programId: formData.programId,
-            quotaName: 'Management',
-          });
-          toast.success('Applicant created and seat allocated successfully!');
-        } catch (allocateError) {
-          toast.error('Applicant created but seat allocation failed: ' + allocateError.response?.data?.message);
-          navigate('/applicants');
-          return;
-        }
-      } else {
-        toast.success('Applicant created successfully! Please allocate seat from applicant details page.');
-      }
-      
-      navigate('/applicants');
+      const submitData = { ...formData };
+      const response = await axios.post('http://localhost:5000/api/applicants', submitData);
+      toast.success('Applicant created successfully! Redirecting to details page...');
+      // Redirect to applicant details page after 1 second
+      setTimeout(() => {
+        navigate(`/applicants/${response.data._id}`);
+      }, 1000);
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to create applicant');
-    } finally {
+      if (error.response?.data?.message) {
+        toast.error(error.response.data.message);
+      } else {
+        toast.error('Failed to create applicant');
+      }
       setLoading(false);
     }
   };
 
+  // Get available quota options based on admission type
+  const getAvailableQuotas = () => {
+    if (admissionType === 'government') {
+      return ['KCET', 'COMEDK'].filter(quota => {
+        const availability = seatAvailability[quota];
+        return availability && availability.isAvailable;
+      });
+    } else if (admissionType === 'management') {
+      return ['Management'].filter(quota => {
+        const availability = seatAvailability[quota];
+        return availability && availability.isAvailable;
+      });
+    }
+    return [];
+  };
+
+  // Get current date for max date (18 years ago for age restriction)
+  const getMaxDate = () => {
+    const today = new Date();
+    const eighteenYearsAgo = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+    return eighteenYearsAgo.toISOString().split('T')[0];
+  };
+
+  const getMinDate = () => {
+    const today = new Date();
+    const seventyYearsAgo = new Date(today.getFullYear() - 70, today.getMonth(), today.getDate());
+    return seventyYearsAgo.toISOString().split('T')[0];
+  };
+
+  // If admission type not selected, show selection screen
+  if (!admissionType) {
+    return (
+      <div>
+        <h1 className="text-2xl font-bold mb-6">Add New Applicant</h1>
+        <div className="bg-white rounded-lg shadow p-8">
+          <h2 className="text-xl font-semibold mb-6 text-center">Select Admission Type</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <button
+              onClick={() => handleAdmissionTypeChange('government')}
+              className="bg-blue-500 hover:bg-blue-600 text-white p-8 rounded-lg text-center transition duration-200"
+            >
+              <div className="text-2xl font-bold mb-2">Government Admission</div>
+              <div className="text-sm">KCET / COMEDK Quota</div>
+            </button>
+            <button
+              onClick={() => handleAdmissionTypeChange('management')}
+              className="bg-green-500 hover:bg-green-600 text-white p-8 rounded-lg text-center transition duration-200"
+            >
+              <div className="text-2xl font-bold mb-2">Management Admission</div>
+              <div className="text-sm">Management Quota</div>
+            </button>
+          </div>
+          <button
+            onClick={() => navigate('/applicants')}
+            className="mt-6 w-full bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Add New Applicant</h1>
-      
-      {/* Journey Information */}
-      <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h3 className="text-sm font-semibold text-blue-900 mb-2">Admission Journey:</h3>
-        <div className="text-sm text-blue-800">
-          {formData.quotaType === 'Management' ? (
-            <p>Management Admission: Create Applicant → Select Program → Check Seat Availability → Allocate Seat → Verify Documents → Fee Paid → Admission Confirmed</p>
-          ) : formData.quotaType === 'KCET' || formData.quotaType === 'COMEDK' ? (
-            <p>Government Admission: Create Applicant → Enter Allotment Details → Select Quota → System Checks Availability → Seat Locked → Documents Verified → Fee Paid → Admission Number Generated</p>
-          ) : (
-            <p>Select quota type to see admission journey</p>
-          )}
-        </div>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">
+          Add New Applicant - {admissionType === 'government' ? 'Government Admission' : 'Management Admission'}
+        </h1>
+        <button
+          onClick={() => setAdmissionType('')}
+          className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600"
+        >
+          Back to Selection
+        </button>
       </div>
       
       <div className="bg-white rounded-lg shadow p-6">
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Program Selection */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Select Program *</label>
+              <select
+                required
+                value={selectedProgram}
+                onChange={handleProgramChange}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              >
+                <option value="">Select Program</option>
+                {programs.map(program => (
+                  <option key={program._id} value={program._id}>
+                    {program.name} ({program.code}) - Intake: {program.totalIntake}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Quota Type Selection with Seat Availability */}
+            {selectedProgram && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Quota Type *</label>
+                {checkingSeats ? (
+                  <div className="mt-2 text-gray-500">Checking seat availability...</div>
+                ) : (
+                  <>
+                    <select
+                      required
+                      value={formData.quotaType}
+                      onChange={handleQuotaChange}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    >
+                      <option value="">Select Quota</option>
+                      {getAvailableQuotas().map(quota => (
+                        <option key={quota} value={quota}>
+                          {quota} - Available: {seatAvailability[quota]?.remainingSeats} / {seatAvailability[quota]?.totalSeats} seats
+                        </option>
+                      ))}
+                    </select>
+                    {getAvailableQuotas().length === 0 && (
+                      <p className="mt-2 text-sm text-red-600">
+                        No seats available in any quota for this program. All seats are filled.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Allotment Number for Government Admission */}
+            {admissionType === 'government' && formData.quotaType && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Allotment Number *</label>
+                <input
+                  type="text"
+                  name="allotmentNumber"
+                  required
+                  value={formData.allotmentNumber}
+                  onChange={handleChange}
+                  placeholder="Enter government allotment number"
+                  className={`mt-1 block w-full rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 ${
+                    uniquenessStatus.allotmentNumber.isValid 
+                      ? 'border-gray-300' 
+                      : 'border-red-500'
+                  }`}
+                />
+                {checkingUniqueness.allotmentNumber && (
+                  <p className="mt-1 text-xs text-gray-500">Checking...</p>
+                )}
+                {!checkingUniqueness.allotmentNumber && uniquenessStatus.allotmentNumber.message && (
+                  <p className={`mt-1 text-xs ${
+                    uniquenessStatus.allotmentNumber.isValid ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {uniquenessStatus.allotmentNumber.message}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Personal Information */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">Full Name *</label>
@@ -178,6 +507,7 @@ const ApplicantForm = () => {
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               />
             </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-700">Email *</label>
               <input
@@ -186,9 +516,25 @@ const ApplicantForm = () => {
                 required
                 value={formData.email}
                 onChange={handleChange}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                placeholder="example@gmail.com"
+                className={`mt-1 block w-full rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 ${
+                  uniquenessStatus.email.isValid 
+                    ? 'border-gray-300' 
+                    : 'border-red-500'
+                }`}
               />
+              {checkingUniqueness.email && (
+                <p className="mt-1 text-xs text-gray-500">Checking availability...</p>
+              )}
+              {!checkingUniqueness.email && uniquenessStatus.email.message && (
+                <p className={`mt-1 text-xs ${
+                  uniquenessStatus.email.isValid ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {uniquenessStatus.email.message}
+                </p>
+              )}
             </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-700">Phone *</label>
               <input
@@ -197,9 +543,25 @@ const ApplicantForm = () => {
                 required
                 value={formData.phone}
                 onChange={handleChange}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                placeholder="+919876543210 or 9876543210"
+                className={`mt-1 block w-full rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 ${
+                  uniquenessStatus.phone.isValid 
+                    ? 'border-gray-300' 
+                    : 'border-red-500'
+                }`}
               />
+              {checkingUniqueness.phone && (
+                <p className="mt-1 text-xs text-gray-500">Checking availability...</p>
+              )}
+              {!checkingUniqueness.phone && uniquenessStatus.phone.message && (
+                <p className={`mt-1 text-xs ${
+                  uniquenessStatus.phone.isValid ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {uniquenessStatus.phone.message}
+                </p>
+              )}
             </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-700">Date of Birth *</label>
               <input
@@ -207,10 +569,14 @@ const ApplicantForm = () => {
                 name="dateOfBirth"
                 required
                 value={formData.dateOfBirth}
-                onChange={handleChange}
+                onChange={handleDateChange}
+                min={getMinDate()}
+                max={getMaxDate()}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               />
+              <p className="mt-1 text-xs text-gray-500">Click the calendar icon to select date (Age must be between 18 and 70 years)</p>
             </div>
+            
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700">Address *</label>
               <textarea
@@ -222,6 +588,7 @@ const ApplicantForm = () => {
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               />
             </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-700">City *</label>
               <input
@@ -233,6 +600,7 @@ const ApplicantForm = () => {
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               />
             </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-700">State *</label>
               <input
@@ -244,17 +612,21 @@ const ApplicantForm = () => {
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               />
             </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-700">Pincode *</label>
               <input
                 type="text"
                 name="pincode"
                 required
+                pattern="[0-9]{6}"
+                title="Pincode must be 6 digits"
                 value={formData.pincode}
                 onChange={handleChange}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               />
             </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-700">Category *</label>
               <select
@@ -271,6 +643,7 @@ const ApplicantForm = () => {
                 <option value="OBC">OBC</option>
               </select>
             </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-700">Entry Type *</label>
               <select
@@ -285,94 +658,6 @@ const ApplicantForm = () => {
                 <option value="Lateral">Lateral</option>
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Quota Type *</label>
-              <select
-                name="quotaType"
-                required
-                value={formData.quotaType}
-                onChange={handleChange}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              >
-                <option value="">Select Quota</option>
-                <option value="KCET">KCET (Government)</option>
-                <option value="COMEDK">COMEDK (Government)</option>
-                <option value="Management">Management</option>
-              </select>
-            </div>
-            
-            {/* Government Admission Fields */}
-            {(formData.quotaType === 'KCET' || formData.quotaType === 'COMEDK') && (
-              <div className="md:col-span-2 bg-yellow-50 p-4 rounded-md border border-yellow-200">
-                <h3 className="text-sm font-semibold text-yellow-900 mb-3">Government Admission Details</h3>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Allotment Number *</label>
-                  <input
-                    type="text"
-                    name="allotmentNumber"
-                    required
-                    value={formData.allotmentNumber}
-                    onChange={handleChange}
-                    placeholder="Enter government allotment number"
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Allotment number from government counseling</p>
-                </div>
-              </div>
-            )}
-            
-            {/* Management Admission Fields */}
-            {formData.quotaType === 'Management' && (
-              <div className="md:col-span-2 bg-green-50 p-4 rounded-md border border-green-200">
-                <h3 className="text-sm font-semibold text-green-900 mb-3">Management Admission Details</h3>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Select Program *</label>
-                  <select
-                    name="programId"
-                    required
-                    value={formData.programId}
-                    onChange={handleChange}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  >
-                    <option value="">Select Program</option>
-                    {programs.map(program => (
-                      <option key={program._id} value={program._id}>
-                        {program.name} - {program.code} (Intake: {program.totalIntake})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                {/* Seat Availability Display */}
-                {remainingSeats && (
-                  <div className="mt-3 p-3 bg-white rounded-md border border-green-200">
-                    <p className="text-sm font-medium text-gray-700">Seat Availability:</p>
-                    <div className="grid grid-cols-3 gap-2 mt-1 text-sm">
-                      <div>
-                        <span className="text-gray-600">Total Seats:</span>
-                        <span className="ml-2 font-semibold">{remainingSeats.totalSeats}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Filled:</span>
-                        <span className="ml-2 font-semibold">{remainingSeats.filledSeats}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Available:</span>
-                        <span className={`ml-2 font-bold ${remainingSeats.remainingSeats > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {remainingSeats.remainingSeats}
-                        </span>
-                      </div>
-                    </div>
-                    {!remainingSeats.isAvailable && (
-                      <p className="text-sm text-red-600 font-bold mt-2">⚠️ No seats available in Management quota for this program!</p>
-                    )}
-                    {remainingSeats.isAvailable && remainingSeats.remainingSeats > 0 && (
-                      <p className="text-sm text-green-600 mt-2">✓ Seats available. Seat will be allocated automatically.</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
             
             <div>
               <label className="block text-sm font-medium text-gray-700">Marks (%) *</label>
@@ -381,11 +666,14 @@ const ApplicantForm = () => {
                 name="marks"
                 required
                 step="0.01"
+                min="0"
+                max="100"
                 value={formData.marks}
                 onChange={handleChange}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               />
             </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-700">Qualifying Exam *</label>
               <input
@@ -394,13 +682,13 @@ const ApplicantForm = () => {
                 required
                 value={formData.qualifyingExam}
                 onChange={handleChange}
-                placeholder="e.g., KCET, COMEDK, University Exam"
+                placeholder="e.g., KCET, COMEDK, CBSE, etc."
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               />
             </div>
           </div>
-          
-          <div className="flex justify-end space-x-4 pt-4">
+
+          <div className="flex justify-end space-x-4">
             <button
               type="button"
               onClick={() => navigate('/applicants')}
@@ -410,8 +698,12 @@ const ApplicantForm = () => {
             </button>
             <button
               type="submit"
-              disabled={loading || (formData.quotaType === 'Management' && (!remainingSeats || !remainingSeats.isAvailable))}
-              className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={loading || getAvailableQuotas().length === 0 || !uniquenessStatus.email.isValid || !uniquenessStatus.phone.isValid || (admissionType === 'government' && formData.quotaType && !uniquenessStatus.allotmentNumber.isValid)}
+              className={`px-4 py-2 rounded-md text-white ${
+                loading || getAvailableQuotas().length === 0 || !uniquenessStatus.email.isValid || !uniquenessStatus.phone.isValid || (admissionType === 'government' && formData.quotaType && !uniquenessStatus.allotmentNumber.isValid)
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-blue-500 hover:bg-blue-600'
+              }`}
             >
               {loading ? 'Creating...' : 'Create Applicant'}
             </button>

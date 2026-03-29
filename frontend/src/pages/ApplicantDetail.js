@@ -113,7 +113,11 @@ const ApplicantDetail = () => {
         applicantId: id,
       });
       toast.success(`✓ Admission confirmed! Admission Number: ${response.data.admissionNumber}`);
-      fetchApplicant();
+      toast.success('Redirecting to applicants list...');
+      // Redirect to applicants list after 2 seconds
+      setTimeout(() => {
+        navigate('/applicants');
+      }, 2000);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to confirm admission');
     }
@@ -375,7 +379,10 @@ const ApplicantDetail = () => {
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-lg font-semibold mb-4">Step 6: Generate Admission Number & Confirm</h2>
               <p className="text-sm text-gray-600 mb-4">
-                Admission number will be generated in format: <strong>INST/2026/UG/CSE/KCET/0001</strong>
+                Admission number will be generated in format: <strong>INSTITUTE_CODE/YEAR/COURSE_TYPE/PROGRAM_CODE/QUOTA_TYPE/SEQUENCE</strong>
+              </p>
+              <p className="text-sm text-gray-600 mb-4">
+                Example: <strong>ABCE/2026/UG/CSE/KCET/0001</strong>
               </p>
               <button
                 onClick={handleConfirmAdmission}

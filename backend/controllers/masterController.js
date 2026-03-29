@@ -6,8 +6,15 @@ const Program = require('../models/Program');
 // Institution Controllers
 const createInstitution = async (req, res) => {
   try {
-    const { name } = req.body;
-    const institution = new Institution({ name });
+    const { name, code } = req.body;
+    
+    // Check if code already exists
+    const existingInstitution = await Institution.findOne({ code });
+    if (existingInstitution) {
+      return res.status(400).json({ message: 'Institution code already exists' });
+    }
+    
+    const institution = new Institution({ name, code });
     await institution.save();
     res.status(201).json(institution);
   } catch (error) {
