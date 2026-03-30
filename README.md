@@ -146,6 +146,8 @@ The typical end-to-end flow in the system works as follows:
 | Styling   | Tailwind CSS / Custom dark theme |
 
 ---
+AI Tool Disclosure:
+I have used AI tools (ChatGPT & Visual Studio Code Copilot) to assist with code structuring, debugging, and improving code readability. All core logic, implementation decisions, and overall architecture were designed and developed by me.
 
 ## Notes
 
