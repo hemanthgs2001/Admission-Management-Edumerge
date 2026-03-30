@@ -2,46 +2,136 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
+const TAB_ORDER = ['institution', 'campus', 'department', 'program'];
+
+const tabConfig = [
+  { key: 'institution', label: 'Institution' },
+  { key: 'campus',      label: 'Campus' },
+  { key: 'department',  label: 'Department' },
+  { key: 'program',     label: 'Program' },
+];
+
+const EditIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24"
+    fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+  </svg>
+);
+
+const ChevronLeft = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24"
+    fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="15 18 9 12 15 6" />
+  </svg>
+);
+
+const ChevronRight = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24"
+    fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="9 18 15 12 9 6" />
+  </svg>
+);
+
 const Masters = () => {
   const [institutions, setInstitutions] = useState([]);
-  const [campuses, setCampuses] = useState([]);
-  const [departments, setDepartments] = useState([]);
-  const [programs, setPrograms] = useState([]);
-  const [activeTab, setActiveTab] = useState('institution');
-  const [formData, setFormData] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [codeError, setCodeError] = useState('');
+  const [campuses,     setCampuses]     = useState([]);
+  const [departments,  setDepartments]  = useState([]);
+  const [programs,     setPrograms]     = useState([]);
 
-  // Always-visible gray border, turns cyan on focus
+  const [activeTab,  setActiveTab]  = useState('institution');
+  const [formData,   setFormData]   = useState({});
+  const [loading,    setLoading]    = useState(false);
+  const [codeError,  setCodeError]  = useState('');
+  const [editingId,  setEditingId]  = useState(null);
+
+  const currentIndex = TAB_ORDER.indexOf(activeTab);
+  const isFirst      = currentIndex === 0;
+  const isLast       = currentIndex === TAB_ORDER.length - 1;
+
   const inputClass =
     'mt-1 block w-full rounded-md bg-gray-700 text-gray-100 placeholder-gray-500 ' +
     'border border-gray-600 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 ' +
     'focus:outline-none px-3 py-2 text-sm transition duration-150';
 
   useEffect(() => {
+    setFormData({});
+    setCodeError('');
+    setEditingId(null);
     fetchData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const fetchData = async () => {
     try {
       if (activeTab === 'institution') {
-        const res = await axios.get('http://localhost:5000/api/masters/institutions');
-        setInstitutions(res.data);
+        const [instRes, campRes] = await Promise.all([
+          axios.get('http://localhost:5000/api/masters/institutions'),
+          axios.get('http://localhost:5000/api/masters/campuses'),
+        ]);
+        setInstitutions(instRes.data);
+        setCampuses(campRes.data);
       } else if (activeTab === 'campus') {
-        const res = await axios.get('http://localhost:5000/api/masters/campuses');
-        setCampuses(res.data);
+        const [campRes, instRes] = await Promise.all([
+          axios.get('http://localhost:5000/api/masters/campuses'),
+          axios.get('http://localhost:5000/api/masters/institutions'),
+        ]);
+        setCampuses(campRes.data);
+        setInstitutions(instRes.data);
       } else if (activeTab === 'department') {
-        const res = await axios.get('http://localhost:5000/api/masters/departments');
-        setDepartments(res.data);
+        const [deptRes, campRes] = await Promise.all([
+          axios.get('http://localhost:5000/api/masters/departments'),
+          axios.get('http://localhost:5000/api/masters/campuses'),
+        ]);
+        setDepartments(deptRes.data);
+        setCampuses(campRes.data);
       } else if (activeTab === 'program') {
-        const res = await axios.get('http://localhost:5000/api/masters/programs');
-        setPrograms(res.data);
+        const [progRes, deptRes] = await Promise.all([
+          axios.get('http://localhost:5000/api/masters/programs'),
+          axios.get('http://localhost:5000/api/masters/departments'),
+        ]);
+        setPrograms(progRes.data);
+        setDepartments(deptRes.data);
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to fetch data');
     }
   };
 
+  
+  const goNext     = () => !isLast  && setActiveTab(TAB_ORDER[currentIndex + 1]);
+  const goPrevious = () => !isFirst && setActiveTab(TAB_ORDER[currentIndex - 1]);
+
+  
+  const handleEditClick = (program) => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const departmentId =
+      (typeof program.department === 'object' && program.department !== null)
+        ? program.department._id
+        : program.departmentId || program.department || '';
+
+    setEditingId(program._id);
+    setFormData({
+      _id:          program._id,
+      name:         program.name         || '',
+      code:         program.code         || '',
+      departmentId,
+      academicYear: program.academicYear  || '',
+      courseType:   program.courseType    || '',
+      entryType:    program.entryType     || '',
+      totalIntake:  program.totalIntake   || '',
+      quotas:       program.quotas        || [],
+    });
+    setCodeError('');
+    toast.success(`Editing "${program.name}" — update the fields and save.`);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setFormData({});
+    setCodeError('');
+  };
+
+ 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -49,40 +139,108 @@ const Masters = () => {
       if (activeTab === 'institution') {
         await axios.post('http://localhost:5000/api/masters/institutions', formData);
         toast.success('Institution created successfully');
+        setFormData({});
+        setCodeError('');
+        await fetchData();
+        goNext();                         
+
       } else if (activeTab === 'campus') {
         await axios.post('http://localhost:5000/api/masters/campuses', formData);
         toast.success('Campus created successfully');
+        setFormData({});
+        setCodeError('');
+        await fetchData();
+        goNext();                         
+
       } else if (activeTab === 'department') {
         await axios.post('http://localhost:5000/api/masters/departments', formData);
         toast.success('Department created successfully');
+        setFormData({});
+        setCodeError('');
+        await fetchData();
+        goNext();                         
+
       } else if (activeTab === 'program') {
-        await axios.post('http://localhost:5000/api/masters/programs', formData);
-        toast.success('Program created successfully');
+        if (editingId) {
+          await axios.put(
+            `http://localhost:5000/api/masters/programs/${editingId}`,
+            formData
+          );
+          toast.success('Program updated successfully');
+          setEditingId(null);
+        } else {
+          await axios.post('http://localhost:5000/api/masters/programs', formData);
+          toast.success('Program created successfully');
+        }
+        setFormData({});
+        setCodeError('');
+        fetchData();
       }
-      setFormData({});
-      setCodeError('');
-      fetchData();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to create');
+      toast.error(error.response?.data?.message || 'Failed to save');
     } finally {
       setLoading(false);
     }
   };
 
-  const tabConfig = [
-    { key: 'institution', label: 'Institution' },
-    { key: 'campus',      label: 'Campus' },
-    { key: 'department',  label: 'Department' },
-    { key: 'program',     label: 'Program' },
-  ];
+ 
+  const renderActionRow = ({ submitDisabled = false, isUpdate = false } = {}) => (
+    <div className="flex items-center justify-between pt-2">
+      {/* Previous */}
+      <button
+        type="button"
+        onClick={goPrevious}
+        disabled={isFirst}
+        className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium border transition
+          ${isFirst
+            ? 'border-gray-700 text-gray-600 cursor-not-allowed'
+            : 'border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white'}`}
+      >
+        <ChevronLeft />
+        Previous
+      </button>
 
-  const submitLabel = {
-    institution: 'Create Institution',
-    campus:      'Create Campus',
-    department:  'Create Department',
-    program:     'Create Program',
-  };
+      <div className="flex items-center gap-3">
+        {/* Cancel (edit mode only) */}
+        {isUpdate && (
+          <button
+            type="button"
+            onClick={handleCancelEdit}
+            className="px-4 py-2 rounded-md text-sm border border-gray-600 text-gray-300 hover:bg-gray-700 transition"
+          >
+            Cancel
+          </button>
+        )}
 
+        {/* Primary submit */}
+        <button
+          type="submit"
+          disabled={submitDisabled || loading}
+          className={`btn-primary ${(submitDisabled || loading) ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          {loading
+            ? (isUpdate ? 'Updating...' : 'Creating...')
+            : (isUpdate
+                ? 'Update Program'
+                : `Create ${tabConfig.find(t => t.key === activeTab)?.label}`)}
+        </button>
+
+        {/* Next (only on tabs that are not the last) */}
+        {!isLast && (
+          <button
+            type="button"
+            onClick={goNext}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium border border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white transition"
+          >
+            Next
+            <ChevronRight />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  
   const renderForm = () => {
     switch (activeTab) {
       case 'institution':
@@ -115,15 +273,7 @@ const Masters = () => {
                 </p>
               </div>
             </div>
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={loading}
-                className={`btn-primary ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {loading ? 'Creating...' : submitLabel[activeTab]}
-              </button>
-            </div>
+            {renderActionRow()}
           </form>
         );
 
@@ -139,6 +289,7 @@ const Masters = () => {
                   value={formData.name || ''}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className={inputClass}
+                  placeholder="e.g., Main Campus"
                 />
               </div>
               <div>
@@ -156,18 +307,11 @@ const Masters = () => {
                 </select>
               </div>
             </div>
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={loading}
-                className={`btn-primary ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {loading ? 'Creating...' : submitLabel[activeTab]}
-              </button>
-            </div>
+            {renderActionRow()}
           </form>
         );
 
+      // ── Department ───────────────────────────────────────────────────────
       case 'department':
         return (
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -180,6 +324,7 @@ const Masters = () => {
                   value={formData.name || ''}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className={inputClass}
+                  placeholder="e.g., Computer Science"
                 />
               </div>
               <div>
@@ -197,21 +342,35 @@ const Masters = () => {
                 </select>
               </div>
             </div>
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={loading}
-                className={`btn-primary ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {loading ? 'Creating...' : submitLabel[activeTab]}
-              </button>
-            </div>
+            {renderActionRow()}
           </form>
         );
 
+      // ── Program ──────────────────────────────────────────────────────────
       case 'program':
         return (
           <form onSubmit={handleSubmit} className="space-y-4">
+
+            {/* Edit-mode notice banner */}
+            {editingId && (
+              <div className="flex items-center justify-between gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-4 py-2.5 text-sm text-yellow-300">
+                <div className="flex items-center gap-2">
+                  <EditIcon />
+                  <span>
+                    Editing <span className="font-semibold">"{formData.name}"</span>
+                    {' '}— update the fields and save.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="text-yellow-400/70 hover:text-yellow-300 text-xs underline underline-offset-2"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300">Program Name</label>
@@ -221,6 +380,7 @@ const Masters = () => {
                   value={formData.name || ''}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className={inputClass}
+                  placeholder="e.g., Computer Science and Engineering"
                 />
               </div>
               <div>
@@ -231,7 +391,8 @@ const Masters = () => {
                   value={formData.code || ''}
                   onChange={(e) => {
                     const upperCode = e.target.value.toUpperCase();
-                    const exists = programs.some(p => p.code === upperCode);
+                    // Skip self-duplicate check in edit mode
+                    const exists = programs.some(p => p.code === upperCode && p._id !== editingId);
                     setCodeError(exists ? 'Program Code already exists' : '');
                     setFormData({ ...formData, code: upperCode });
                   }}
@@ -300,6 +461,7 @@ const Masters = () => {
                   value={formData.totalIntake || ''}
                   onChange={(e) => setFormData({ ...formData, totalIntake: parseInt(e.target.value) })}
                   className={inputClass}
+                  placeholder="e.g., 60"
                 />
               </div>
             </div>
@@ -332,15 +494,8 @@ const Masters = () => {
               <p className="text-xs text-gray-500 mt-2">Total quota seats must equal total intake</p>
             </div>
 
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={loading || !!codeError}
-                className={`btn-primary ${(loading || !!codeError) ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {loading ? 'Creating...' : submitLabel[activeTab]}
-              </button>
-            </div>
+            {/* Program is the last tab — no Next button shown */}
+            {renderActionRow({ submitDisabled: !!codeError, isUpdate: !!editingId })}
           </form>
         );
 
@@ -349,6 +504,7 @@ const Masters = () => {
     }
   };
 
+  // ── Tables ────────────────────────────────────────────────────────────────
   const renderTable = () => {
     const thClass = "px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider";
     const tdClass = "px-6 py-4 text-sm text-gray-300";
@@ -368,13 +524,16 @@ const Masters = () => {
               {institutions.map(inst => (
                 <tr key={inst._id} className="hover:bg-gray-700/40 transition duration-150">
                   <td className={tdClass}>{inst.name}</td>
-                  <td className={tdClass}><span className="font-mono font-bold text-cyan-400">{inst.code}</span></td>
+                  <td className={tdClass}>
+                    <span className="font-mono font-bold text-cyan-400">{inst.code}</span>
+                  </td>
                   <td className={tdClass}>{inst.campuses?.length || 0}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         );
+
       case 'campus':
         return (
           <table className="min-w-full divide-y divide-gray-700">
@@ -389,13 +548,17 @@ const Masters = () => {
               {campuses.map(campus => (
                 <tr key={campus._id} className="hover:bg-gray-700/40 transition duration-150">
                   <td className={tdClass}>{campus.name}</td>
-                  <td className={tdClass}>{campus.institution?.name} <span className="text-cyan-400 font-mono">({campus.institution?.code})</span></td>
+                  <td className={tdClass}>
+                    {campus.institution?.name}{' '}
+                    <span className="text-cyan-400 font-mono">({campus.institution?.code})</span>
+                  </td>
                   <td className={tdClass}>{campus.departments?.length || 0}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         );
+
       case 'department':
         return (
           <table className="min-w-full divide-y divide-gray-700">
@@ -417,6 +580,7 @@ const Masters = () => {
             </tbody>
           </table>
         );
+
       case 'program':
         return (
           <table className="min-w-full divide-y divide-gray-700">
@@ -427,55 +591,85 @@ const Masters = () => {
                 <th className={thClass}>Department</th>
                 <th className={thClass}>Total Intake</th>
                 <th className={thClass}>Quotas</th>
+                <th className={thClass}>Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700">
               {programs.map(program => (
-                <tr key={program._id} className="hover:bg-gray-700/40 transition duration-150">
+                <tr
+                  key={program._id}
+                  className={`hover:bg-gray-700/40 transition duration-150 ${
+                    editingId === program._id
+                      ? 'bg-yellow-500/5 ring-1 ring-inset ring-yellow-500/20'
+                      : ''
+                  }`}
+                >
                   <td className={tdClass}>{program.name}</td>
-                  <td className={tdClass}><span className="font-mono text-cyan-400">{program.code}</span></td>
+                  <td className={tdClass}>
+                    <span className="font-mono text-cyan-400">{program.code}</span>
+                  </td>
                   <td className={tdClass}>{program.department?.name}</td>
                   <td className={tdClass}>{program.totalIntake}</td>
-                  <td className={tdClass}>{program.quotas.map(q => `${q.name}: ${q.seats}`).join(', ')}</td>
+                  <td className={tdClass}>
+                    {program.quotas.map(q => `${q.name}: ${q.seats}`).join(', ')}
+                  </td>
+                  <td className={tdClass}>
+                    <button
+                      onClick={() => handleEditClick(program)}
+                      title="Edit program"
+                      className="p-1.5 rounded-md text-gray-400 hover:text-cyan-400 hover:bg-cyan-500/10 transition"
+                    >
+                      <EditIcon />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         );
+
       default:
         return null;
     }
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6 text-gray-100">Masters Configuration</h1>
 
       <div className="bg-gray-800 rounded-xl shadow-lg border border-gray-700">
-        {/* Tab Navigation */}
+
+        {/* Tab Navigation with step indicators */}
         <div className="border-b border-gray-700">
           <nav className="flex space-x-1 px-6">
-            {tabConfig.map(tab => (
+            {tabConfig.map((tab, idx) => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`py-4 px-4 text-sm font-medium transition duration-200 border-b-2 ${
+                className={`py-4 px-4 text-sm font-medium transition duration-200 border-b-2 flex items-center gap-2 ${
                   activeTab === tab.key
                     ? 'border-cyan-500 text-cyan-400'
                     : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'
                 }`}
               >
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                  activeTab === tab.key
+                    ? 'bg-cyan-500 text-gray-900'
+                    : 'bg-gray-600 text-gray-300'
+                }`}>
+                  {idx + 1}
+                </span>
                 {tab.label}
               </button>
             ))}
           </nav>
         </div>
 
-        {/* Form Section */}
+        {/* Form + Table */}
         <div className="p-6">
           {renderForm()}
 
-          {/* Existing Records */}
           <div className="mt-8">
             <h3 className="text-lg font-semibold mb-4 text-gray-100">Existing Records</h3>
             <div className="overflow-x-auto rounded-lg border border-gray-700">
@@ -483,6 +677,7 @@ const Masters = () => {
             </div>
           </div>
         </div>
+
       </div>
     </div>
   );

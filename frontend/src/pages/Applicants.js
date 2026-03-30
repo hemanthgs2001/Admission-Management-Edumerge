@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
@@ -8,6 +8,7 @@ const Applicants = () => {
   const [applicants, setApplicants] = useState([]);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchApplicants();
@@ -148,14 +149,34 @@ const Applicants = () => {
                       </span>
                     </td>
 
-                    {/* Actions */}
+                    {/* Actions - Direct Icons */}
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <Link
-                        to={`/applicants/${applicant._id}`}
-                        className="text-cyan-400 hover:text-cyan-300 transition-colors duration-150"
-                      >
-                        View Details
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        {/* View Details Icon */}
+                        <button
+                          onClick={() => navigate(`/applicants/${applicant._id}`)}
+                          className="p-1.5 rounded-md text-cyan-400 hover:text-cyan-300 hover:bg-gray-700 transition-colors duration-150 focus:outline-none"
+                          title="View Details"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                            <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+
+                        {/* Edit Icon - Only for admin/admission_officer */}
+                        {(user?.role === 'admin' || user?.role === 'admission_officer') && (
+                          <button
+                            onClick={() => navigate(`/applicants/${applicant._id}/edit`)}
+                            className="p-1.5 rounded-md text-yellow-400 hover:text-yellow-300 hover:bg-gray-700 transition-colors duration-150 focus:outline-none"
+                            title="Edit Applicant"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))

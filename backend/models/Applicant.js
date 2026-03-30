@@ -53,10 +53,6 @@ const ApplicantSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
-  qualifyingExam: {
-    type: String,
-    required: true,
-  },
   allotmentNumber: {
     type: String,
   },

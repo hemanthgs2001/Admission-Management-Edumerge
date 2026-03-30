@@ -63,6 +63,16 @@ function AppRoutes() {
           } 
         />
         
+        {/* Edit route - needs to be before the :id route to avoid conflicts */}
+        <Route 
+          path="applicants/:id/edit" 
+          element={
+            <RoleBasedRoute allowedRoles={['admission_officer']}>
+              <ApplicantForm />
+            </RoleBasedRoute>
+          } 
+        />
+        
         <Route 
           path="applicants/:id" 
           element={

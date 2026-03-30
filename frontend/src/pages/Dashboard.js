@@ -95,6 +95,9 @@ const Dashboard = () => {
 
   const totalDocuments = dashboardData.documents.pending + dashboardData.documents.submitted + dashboardData.documents.verified;
 
+  // Calculate total for percentage calculation
+  const totalAdmissionSeats = dashboardData.summary.totalAdmitted + dashboardData.summary.remainingSeats;
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Welcome Section */}
@@ -188,7 +191,10 @@ const Dashboard = () => {
                 cx="50%"
                 cy="50%"
                 labelLine={false}
-                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                label={({ name, value }) => {
+                  const percentage = (value / totalAdmissionSeats) * 100;
+                  return `${name}: ${percentage.toFixed(2)}%`;
+                }}
                 outerRadius={100}
                 fill="#8884d8"
                 dataKey="value"
@@ -239,7 +245,7 @@ const Dashboard = () => {
                     cx="50%"
                     cy="50%"
                     labelLine={true}
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(2)}%`}
                     outerRadius={90}
                     fill="#8884d8"
                     dataKey="value"
@@ -265,7 +271,7 @@ const Dashboard = () => {
                     </div>
                     <p className="text-xl font-bold text-gray-100 mt-1">{status.value}</p>
                     <p className="text-xs text-gray-500">
-                      {totalDocuments > 0 ? ((status.value / totalDocuments) * 100).toFixed(0) : 0}%
+                      {totalDocuments > 0 ? ((status.value / totalDocuments) * 100).toFixed(2) : 0}%
                     </p>
                   </div>
                 ))}
@@ -338,7 +344,7 @@ const Dashboard = () => {
             </thead>
             <tbody className="bg-gray-800 divide-y divide-gray-700">
               {dashboardData.programs.map((program, index) => {
-                const fillRate = (program.filled / program.totalIntake * 100).toFixed(1);
+                const fillRate = (program.filled / program.totalIntake * 100).toFixed(2);
                 return (
                   <tr key={index} className="hover:bg-gray-700/50 transition-colors">
                     <td className="table-cell font-medium text-gray-200">{program.name}</td>

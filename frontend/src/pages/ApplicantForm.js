@@ -1,39 +1,28 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { Country, State, City } from 'country-state-city';
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  country-state-city  (npm i country-state-city)
-//  Docs: https://github.com/harpreetkhalsagtbit/country-state-city
-//
-//  API used here:
-//    State.getStatesOfCountry('IN')   → [{ isoCode, name, … }]
-//    City.getCitiesOfState('IN', isoCode) → [{ name, … }]
-//
-//  Pincode is then resolved via https://api.postalpincode.in/postoffice/<city>
-// ─────────────────────────────────────────────────────────────────────────────
-
 const ApplicantForm = () => {
   const navigate = useNavigate();
+  const { id } = useParams();                        
+  const isEditMode = Boolean(id);
+
   const [programs, setPrograms] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(isEditMode); 
   const [admissionType, setAdmissionType] = useState('');
   const [selectedProgram, setSelectedProgram] = useState('');
   const [seatAvailability, setSeatAvailability] = useState({
     KCET: null, COMEDK: null, Management: null,
   });
   const [checkingSeats, setCheckingSeats] = useState(false);
-
-  // ── Address cascade ───────────────────────────────────────────────────────
-  const indianStates = State.getStatesOfCountry('IN'); // [{isoCode, name, …}]
-  const [selectedStateIso, setSelectedStateIso] = useState('');   // e.g. 'KA'
-  const [cityList, setCityList] = useState([]);                    // [{name, …}]
+  const indianStates = State.getStatesOfCountry('IN');
+  const [selectedStateIso, setSelectedStateIso] = useState('');
+  const [cityList, setCityList] = useState([]);
   const [pincodeOptions, setPincodeOptions] = useState([]);
   const [loadingPincodes, setLoadingPincodes] = useState(false);
-
-  // ── Uniqueness checks ─────────────────────────────────────────────────────
   const [checkingUniqueness, setCheckingUniqueness] = useState({
     email: false, phone: false, allotmentNumber: false,
   });
@@ -50,7 +39,6 @@ const ApplicantForm = () => {
     marks: '', qualifyingExam: '', allotmentNumber: '',
   });
 
-  // ── Shared input styles ───────────────────────────────────────────────────
   const inputBase =
     'mt-1 block w-full rounded-md bg-gray-700 text-gray-100 placeholder-gray-500 ' +
     'border border-gray-600 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 ' +
@@ -66,23 +54,21 @@ const ApplicantForm = () => {
     'mt-1 block w-full rounded-md bg-gray-600 text-cyan-300 placeholder-gray-500 ' +
     'border border-cyan-700 px-3 py-2 text-sm cursor-not-allowed';
 
-  // ── Fetch pincodes for a city via India Post API ──────────────────────────
+  const inputDisabled =
+    'mt-1 block w-full rounded-md bg-gray-600 text-gray-500 placeholder-gray-600 ' +
+    'border border-gray-600 px-3 py-2 text-sm cursor-not-allowed';
   const fetchPincodesForCity = useCallback(async (cityName) => {
     if (!cityName) return;
     setLoadingPincodes(true);
     setPincodeOptions([]);
     setFormData(prev => ({ ...prev, pincode: '' }));
-
     try {
       const res = await fetch(
         `https://api.postalpincode.in/postoffice/${encodeURIComponent(cityName)}`
       );
       const data = await res.json();
-
       if (data[0]?.Status === 'Success' && data[0]?.PostOffice?.length > 0) {
-        const pins = [
-          ...new Set(data[0].PostOffice.map(po => po.Pincode)),
-        ].sort();
+        const pins = [...new Set(data[0].PostOffice.map(po => po.Pincode))].sort();
         setPincodeOptions(pins);
         if (pins.length === 1) {
           setFormData(prev => ({ ...prev, pincode: pins[0] }));
@@ -100,7 +86,6 @@ const ApplicantForm = () => {
     }
   }, []);
 
-  // ── Programs ──────────────────────────────────────────────────────────────
   useEffect(() => { fetchPrograms(); }, []);
 
   const fetchPrograms = async () => {
@@ -112,8 +97,63 @@ const ApplicantForm = () => {
     }
   };
 
-  // ── Seat availability ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isEditMode) return;
+    const loadApplicant = async () => {
+      try {
+        const { data } = await axios.get(`http://localhost:5000/api/applicants/${id}`);
+
+        // Determine admission type from quotaType
+        const qt = data.quotaType;
+        const type = (qt === 'KCET' || qt === 'COMEDK') ? 'government' : 'management';
+        setAdmissionType(type);
+
+        let programId = '';
+        if (data.program) {
+          programId = typeof data.program === 'object' ? data.program._id : data.program;
+        }
+        setSelectedProgram(programId);
+
+        // Restore state ISO
+        const stateObj = indianStates.find(s => s.name === data.state);
+        if (stateObj) {
+          setSelectedStateIso(stateObj.isoCode);
+          const cities = City.getCitiesOfState('IN', stateObj.isoCode);
+          setCityList(cities);
+        }
+
+        // Keep pincode as-is (manual fallback)
+        if (data.pincode) setPincodeOptions([data.pincode]);
+
+        setFormData({
+          fullName: data.fullName || '',
+          email: data.email || '',
+          phone: data.phone || '',
+          dateOfBirth: data.dateOfBirth ? data.dateOfBirth.split('T')[0] : '',
+          address: data.address || '',
+          city: data.city || '',
+          state: data.state || '',
+          pincode: data.pincode || '',
+          category: data.category || '',
+          entryType: data.entryType || '',
+          quotaType: data.quotaType || '',
+          marks: data.marks || '',
+          qualifyingExam: data.qualifyingExam || '',
+          allotmentNumber: data.allotmentNumber || '',
+        });
+      } catch {
+        toast.error('Failed to load applicant data');
+        navigate('/applicants');
+      } finally {
+        setPageLoading(false);
+      }
+    };
+    loadApplicant();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
   const checkSeatAvailability = useCallback(async () => {
+    if (!selectedProgram) return;
     setCheckingSeats(true);
     const availability = { KCET: null, COMEDK: null, Management: null };
     for (const quota of ['KCET', 'COMEDK', 'Management']) {
@@ -134,13 +174,13 @@ const ApplicantForm = () => {
     if (selectedProgram && admissionType) checkSeatAvailability();
   }, [selectedProgram, admissionType, checkSeatAvailability]);
 
-  // ── Uniqueness helpers ────────────────────────────────────────────────────
   const checkEmailUniqueness = async (email) => {
     if (!email) { setUniquenessStatus(p => ({ ...p, email: { isValid: true, message: '' } })); return; }
     setCheckingUniqueness(p => ({ ...p, email: true }));
     try {
       const { data } = await axios.get('http://localhost:5000/api/applicants');
-      const exists = data.some(a => a.email === email);
+      // In edit mode, exclude the current applicant from the check
+      const exists = data.some(a => a.email === email && a._id !== id);
       setUniquenessStatus(p => ({
         ...p,
         email: exists
@@ -156,7 +196,7 @@ const ApplicantForm = () => {
     setCheckingUniqueness(p => ({ ...p, phone: true }));
     try {
       const { data } = await axios.get('http://localhost:5000/api/applicants');
-      const exists = data.some(a => a.phone === phone);
+      const exists = data.some(a => a.phone === phone && a._id !== id);
       setUniquenessStatus(p => ({
         ...p,
         phone: exists
@@ -174,7 +214,7 @@ const ApplicantForm = () => {
     setCheckingUniqueness(p => ({ ...p, allotmentNumber: true }));
     try {
       const { data } = await axios.get('http://localhost:5000/api/applicants');
-      const exists = data.some(a => a.allotmentNumber === allotmentNumber);
+      const exists = data.some(a => a.allotmentNumber === allotmentNumber && a._id !== id);
       setUniquenessStatus(p => ({
         ...p,
         allotmentNumber: exists
@@ -185,28 +225,17 @@ const ApplicantForm = () => {
     finally { setCheckingUniqueness(p => ({ ...p, allotmentNumber: false })); }
   };
 
-  // ── Address cascade handlers ──────────────────────────────────────────────
-
-  // Step 1: State selected
   const handleStateChange = (e) => {
-    const isoCode = e.target.value; // e.g. 'KA'
+    const isoCode = e.target.value;
     const stateObj = indianStates.find(s => s.isoCode === isoCode);
     const stateName = stateObj?.name || '';
-
     setSelectedStateIso(isoCode);
-    // Populate cities from the package (no API call needed)
-    const cities = City.getCitiesOfState('IN', isoCode); // [{name, …}]
+    const cities = City.getCitiesOfState('IN', isoCode);
     setCityList(cities);
     setPincodeOptions([]);
-    setFormData(prev => ({
-      ...prev,
-      state: stateName,
-      city: '',
-      pincode: '',
-    }));
+    setFormData(prev => ({ ...prev, state: stateName, city: '', pincode: '' }));
   };
 
-  // Step 2: City selected
   const handleCityChange = (e) => {
     const cityName = e.target.value;
     setFormData(prev => ({ ...prev, city: cityName, pincode: '' }));
@@ -214,12 +243,10 @@ const ApplicantForm = () => {
     if (cityName) fetchPincodesForCity(cityName);
   };
 
-  // Step 3: Pincode selected / typed
   const handlePincodeChange = (e) => {
     setFormData(prev => ({ ...prev, pincode: e.target.value }));
   };
 
-  // ── Generic change handler ────────────────────────────────────────────────
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -247,7 +274,6 @@ const ApplicantForm = () => {
     setFormData(prev => ({ ...prev, dateOfBirth: e.target.value }));
   };
 
-  // ── Admission type ────────────────────────────────────────────────────────
   const handleAdmissionTypeChange = (type) => {
     setAdmissionType(type);
     setSelectedProgram('');
@@ -266,25 +292,27 @@ const ApplicantForm = () => {
 
   const handleQuotaChange = (e) => {
     const quotaType = e.target.value;
-    if (seatAvailability[quotaType] && !seatAvailability[quotaType].isAvailable) {
+    if (!isEditMode && seatAvailability[quotaType] && !seatAvailability[quotaType].isAvailable) {
       toast.error(`No seats available in ${quotaType} quota. All seats are filled.`);
       return;
     }
     setFormData(prev => ({ ...prev, quotaType, allotmentNumber: '' }));
   };
 
-  // ── Validation & submit ───────────────────────────────────────────────────
   const validateForm = () => {
+    if (!selectedProgram) { toast.error('Please select a program'); return false; }
     if (!uniquenessStatus.email.isValid) { toast.error(uniquenessStatus.email.message); return false; }
     if (!uniquenessStatus.phone.isValid) { toast.error(uniquenessStatus.phone.message); return false; }
     if (admissionType === 'government' && formData.quotaType && !uniquenessStatus.allotmentNumber.isValid) {
       toast.error(uniquenessStatus.allotmentNumber.message); return false;
     }
     if (!formData.quotaType) { toast.error('Please select a quota type'); return false; }
-    const availability = seatAvailability[formData.quotaType];
-    if (availability && !availability.isAvailable) {
-      toast.error(`No seats available in ${formData.quotaType} quota.`);
-      return false;
+    if (!isEditMode) {
+      const availability = seatAvailability[formData.quotaType];
+      if (availability && !availability.isAvailable) {
+        toast.error(`No seats available in ${formData.quotaType} quota.`);
+        return false;
+      }
     }
     return true;
   };
@@ -294,16 +322,28 @@ const ApplicantForm = () => {
     if (!validateForm()) return;
     setLoading(true);
     try {
-      const response = await axios.post('http://localhost:5000/api/applicants', { ...formData });
-      toast.success('Applicant created successfully! Redirecting…');
-      setTimeout(() => navigate(`/applicants/${response.data._id}`), 1000);
+      if (isEditMode) {
+        await axios.put(`http://localhost:5000/api/applicants/${id}`, { ...formData });
+        toast.success('Applicant updated successfully! Redirecting…');
+        setTimeout(() => navigate(`/applicants/${id}`), 1000);
+      } else {
+        const response = await axios.post('http://localhost:5000/api/applicants', { ...formData });
+        toast.success('Applicant created successfully! Redirecting…');
+        setTimeout(() => navigate(`/applicants/${response.data._id}`), 1000);
+      }
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to create applicant');
+      toast.error(error.response?.data?.message || `Failed to ${isEditMode ? 'update' : 'create'} applicant`);
       setLoading(false);
     }
   };
 
   const getAvailableQuotas = () => {
+    if (isEditMode) {
+      // In edit mode show all quotas for the admission type without seat check
+      if (admissionType === 'government') return ['KCET', 'COMEDK'];
+      if (admissionType === 'management') return ['Management'];
+      return [];
+    }
     if (admissionType === 'government') return ['KCET', 'COMEDK'].filter(q => seatAvailability[q]?.isAvailable);
     if (admissionType === 'management') return ['Management'].filter(q => seatAvailability[q]?.isAvailable);
     return [];
@@ -320,13 +360,21 @@ const ApplicantForm = () => {
 
   const isSubmitDisabled =
     loading ||
-    getAvailableQuotas().length === 0 ||
+    !selectedProgram ||
+    (!isEditMode && getAvailableQuotas().length === 0) ||
     !uniquenessStatus.email.isValid ||
     !uniquenessStatus.phone.isValid ||
     (admissionType === 'government' && formData.quotaType && !uniquenessStatus.allotmentNumber.isValid);
 
-  // ── Admission type selection screen ──────────────────────────────────────
-  if (!admissionType) {
+    
+  if (pageLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="loading-spinner animate-spin" />
+      </div>
+    );
+  }
+  if (!admissionType && !isEditMode) {
     return (
       <div>
         <h1 className="text-2xl font-bold mb-6 text-gray-100">Add New Applicant</h1>
@@ -359,19 +407,19 @@ const ApplicantForm = () => {
     );
   }
 
-  // ── Main form ─────────────────────────────────────────────────────────────
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-100">
-          Add New Applicant —{' '}
-          {admissionType === 'government' ? 'Government Admission' : 'Management Admission'}
+          {isEditMode
+            ? 'Edit Applicant'
+            : `Add New Applicant — ${admissionType === 'government' ? 'Government Admission' : 'Management Admission'}`}
         </h1>
         <button
-          onClick={() => setAdmissionType('')}
+          onClick={() => isEditMode ? navigate(`/applicants/${id}`) : setAdmissionType('')}
           className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition duration-150"
         >
-          Back to Selection
+          {isEditMode ? 'Back to Details' : 'Back to Selection'}
         </button>
       </div>
 
@@ -382,7 +430,12 @@ const ApplicantForm = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300">Select Program *</label>
-              <select required value={selectedProgram} onChange={handleProgramChange} className={inputBase}>
+              <select 
+                required 
+                value={selectedProgram} 
+                onChange={handleProgramChange} 
+                className={inputBase}
+              >
                 <option value="">Select Program</option>
                 {programs.map(p => (
                   <option key={p._id} value={p._id}>
@@ -395,19 +448,26 @@ const ApplicantForm = () => {
             {selectedProgram && (
               <div>
                 <label className="block text-sm font-medium text-gray-300">Quota Type *</label>
-                {checkingSeats ? (
+                {checkingSeats && !isEditMode ? (
                   <div className="mt-2 text-gray-400 text-sm">Checking seat availability...</div>
                 ) : (
                   <>
-                    <select required value={formData.quotaType} onChange={handleQuotaChange} className={inputBase}>
+                    <select 
+                      required 
+                      value={formData.quotaType} 
+                      onChange={handleQuotaChange} 
+                      className={inputBase}
+                    >
                       <option value="">Select Quota</option>
                       {getAvailableQuotas().map(quota => (
                         <option key={quota} value={quota}>
-                          {quota} — Available: {seatAvailability[quota]?.remainingSeats} / {seatAvailability[quota]?.totalSeats} seats
+                          {isEditMode
+                            ? quota
+                            : `${quota} — Available: ${seatAvailability[quota]?.remainingSeats} / ${seatAvailability[quota]?.totalSeats} seats`}
                         </option>
                       ))}
                     </select>
-                    {getAvailableQuotas().length === 0 && (
+                    {!isEditMode && getAvailableQuotas().length === 0 && (
                       <p className="mt-2 text-sm text-red-400">No seats available for this program.</p>
                     )}
                   </>
@@ -486,127 +546,77 @@ const ApplicantForm = () => {
               <textarea name="address" required value={formData.address} onChange={handleChange} rows="2" className={inputBase} />
             </div>
 
-            {/* ════════════════════════════════════════════════════════════
-                ADDRESS CASCADE  —  State → City → Pincode
-                State & City : country-state-city package (offline, no API)
-                Pincode       : postalpincode.in (API, triggered by city)
-            ════════════════════════════════════════════════════════════ */}
-
-            {/* Step 1 — State (from country-state-city package) */}
+            {/* State */}
             <div>
-              <label className="block text-sm font-medium text-gray-300">
-                State *
-              </label>
-              <select
-                required
-                value={selectedStateIso}
-                onChange={handleStateChange}
-                className={inputBase}
-              >
+              <label className="block text-sm font-medium text-gray-300">State *</label>
+              <select required value={selectedStateIso} onChange={handleStateChange} className={inputBase}>
                 <option value="">Select State</option>
                 {indianStates.map(s => (
-                  <option key={s.isoCode} value={s.isoCode}>
-                    {s.name}
-                  </option>
+                  <option key={s.isoCode} value={s.isoCode}>{s.name}</option>
                 ))}
               </select>
             </div>
 
-            {/* Step 2 — City (from country-state-city package, filtered by selected state) */}
+            {/* City */}
             <div>
               <label className="block text-sm font-medium text-gray-300">
                 City *
                 {cityList.length > 0 && (
-                  <span className="ml-2 text-xs font-normal text-cyan-400">
-                    ({cityList.length} cities)
-                  </span>
+                  <span className="ml-2 text-xs font-normal text-cyan-400">({cityList.length} cities)</span>
                 )}
               </label>
               <select
-                required
-                value={formData.city}
-                onChange={handleCityChange}
-                disabled={!selectedStateIso}
-                className={inputBase}
+                required value={formData.city} onChange={handleCityChange}
+                disabled={!selectedStateIso} className={inputBase}
               >
-                <option value="">
-                  {selectedStateIso ? 'Select City' : 'Select a state first'}
-                </option>
+                <option value="">{selectedStateIso ? 'Select City' : 'Select a state first'}</option>
                 {cityList.map(c => (
-                  <option key={c.name} value={c.name}>
-                    {c.name}
-                  </option>
+                  <option key={c.name} value={c.name}>{c.name}</option>
                 ))}
               </select>
               {loadingPincodes && (
-                <p className="mt-1 text-xs text-cyan-400 animate-pulse">
-                  ⟳ Fetching pincodes for {formData.city}…
-                </p>
+                <p className="mt-1 text-xs text-cyan-400 animate-pulse">⟳ Fetching pincodes for {formData.city}…</p>
               )}
             </div>
 
-            {/* Step 3 — Pincode (resolved via India Post API after city is chosen) */}
+            {/* Pincode */}
             <div>
               <label className="block text-sm font-medium text-gray-300">
                 Pincode *
                 {pincodeOptions.length > 1 && (
-                  <span className="ml-2 text-xs font-normal text-cyan-400">
-                    ({pincodeOptions.length} pincodes found)
-                  </span>
+                  <span className="ml-2 text-xs font-normal text-cyan-400">({pincodeOptions.length} pincodes found)</span>
                 )}
                 {pincodeOptions.length === 1 && formData.pincode && (
                   <span className="ml-2 text-xs font-normal text-green-400">Auto-filled ✓</span>
                 )}
               </label>
-
               {pincodeOptions.length > 1 ? (
-                // Multiple pincodes → let user pick from dropdown
-                <select
-                  required
-                  value={formData.pincode}
-                  onChange={handlePincodeChange}
-                  disabled={loadingPincodes}
-                  className={inputBase}
-                >
+                <select required value={formData.pincode} onChange={handlePincodeChange} disabled={loadingPincodes} className={inputBase}>
                   <option value="">Select Pincode</option>
                   {pincodeOptions.map(pin => (
                     <option key={pin} value={pin}>{pin}</option>
                   ))}
                 </select>
               ) : pincodeOptions.length === 1 ? (
-                // Exactly one pincode → auto-filled, read-only
-                <input
-                  type="text"
-                  required
-                  value={formData.pincode}
-                  readOnly
-                  className={inputReadOnly}
-                />
+                <input type="text" required value={formData.pincode} readOnly className={inputReadOnly} />
               ) : (
-                // No pincodes resolved yet → manual fallback input
                 <input
-                  type="text"
-                  name="pincode"
-                  required
-                  value={formData.pincode}
+                  type="text" name="pincode" required value={formData.pincode}
                   onChange={handlePincodeChange}
                   placeholder={
                     loadingPincodes ? 'Fetching pincodes…' :
                     formData.city    ? 'Enter 6-digit pincode' :
                     'Select a city first'
                   }
-                  maxLength={6}
-                  pattern="\d{6}"
+                  maxLength={6} pattern="\d{6}"
                   disabled={!formData.city || loadingPincodes}
                   className={inputBase}
                 />
               )}
-              <p className="mt-1 text-xs text-gray-500">
-                Select State → City to auto-populate pincode options
-              </p>
+              <p className="mt-1 text-xs text-gray-500">Select State → City to auto-populate pincode options</p>
             </div>
 
-            {/* ── Other fields ── */}
+            {/* Category */}
             <div>
               <label className="block text-sm font-medium text-gray-300">Category *</label>
               <select name="category" required value={formData.category} onChange={handleChange} className={inputBase}>
@@ -618,6 +628,7 @@ const ApplicantForm = () => {
               </select>
             </div>
 
+            {/* Entry Type */}
             <div>
               <label className="block text-sm font-medium text-gray-300">Entry Type *</label>
               <select name="entryType" required value={formData.entryType} onChange={handleChange} className={inputBase}>
@@ -627,6 +638,7 @@ const ApplicantForm = () => {
               </select>
             </div>
 
+            {/* Marks */}
             <div>
               <label className="block text-sm font-medium text-gray-300">Marks (%) *</label>
               <input
@@ -638,7 +650,11 @@ const ApplicantForm = () => {
 
           {/* ── Actions ── */}
           <div className="flex justify-end space-x-4">
-            <button type="button" onClick={() => navigate('/applicants')} className="btn-secondary">
+            <button
+              type="button"
+              onClick={() => isEditMode ? navigate(`/applicants/${id}`) : navigate('/applicants')}
+              className="btn-secondary"
+            >
               Cancel
             </button>
             <button
@@ -646,7 +662,9 @@ const ApplicantForm = () => {
               disabled={isSubmitDisabled}
               className={`btn-primary ${isSubmitDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              {loading ? 'Creating...' : 'Create Applicant'}
+              {loading
+                ? (isEditMode ? 'Saving...' : 'Creating...')
+                : (isEditMode ? 'Save Changes' : 'Create Applicant')}
             </button>
           </div>
 
